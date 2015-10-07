@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <fstream>
+#include <termios.h>
 #include <sys/ioctl.h>
 
 #ifndef I2C_SLAVE_FORCE
@@ -470,7 +472,7 @@ int eDVBFrontend::PreferredFrontendIndex = -1;
 
 eDVBFrontend::eDVBFrontend(const char *devicenodename, int fe, int &ok, bool simulate, eDVBFrontend *simulate_fe)
 	:m_simulate(simulate), m_enabled(false), m_simulate_fe(simulate_fe), m_dvbid(fe), m_slotid(fe)
-	,m_fd(-1), m_dvbversion(0), m_rotor_mode(false), m_need_rotor_workaround(false)
+	,m_fd(-1), m_rotor_fd(-1), m_dvbversion(0), m_rotor_mode(false), m_need_rotor_workaround(false)
 	,m_state(stateClosed), m_timeout(0), m_tuneTimer(0)
 {
 	m_filename = devicenodename;
@@ -608,6 +610,57 @@ int eDVBFrontend::openFrontend()
 			}
 		}
 
+		//HACK - check if this frontend uses an external actuator
+		std::ifstream rotor_cfg("/etc/rotor");
+		if (rotor_cfg.good())
+		{
+			std::string frontend_name;
+			std::string rotor_name;
+			if(std::getline(rotor_cfg,frontend_name) && std::getline(rotor_cfg,rotor_name))
+			{
+				if (m_filename.compare(frontend_name)==0)
+				{
+					eDebug("[eDVBFrontend] opening external rotor %s", rotor_name.c_str());
+					if (m_rotor_fd < 0)
+					{
+						m_rotor_fd = ::open(rotor_name.c_str(), O_RDWR | O_NOCTTY);
+						if (m_rotor_fd > 0)
+						{
+							struct termios options;
+							::fcntl(m_rotor_fd,0);
+							::tcgetattr(m_rotor_fd, &options);
+							::cfsetispeed(&options,B115200);
+							::cfsetospeed(&options,B115200);
+							//8N1
+							options.c_cflag &= ~PARENB;
+							options.c_cflag &= ~CSTOPB;
+							options.c_cflag &= ~CSIZE;
+							options.c_cflag |= CS8;
+							//no hardware flow control
+							options.c_cflag &= ~CRTSCTS;
+							//raw input
+							options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+							// no software flow control
+							options.c_iflag &= ~(IXON | IXOFF | IXANY);
+							// raw output
+							options.c_oflag &= ~OPOST;
+							// char input timeout 500ms
+							options.c_cc[VMIN] = 0;
+							options.c_cc[VTIME] = 5;
+							::tcsetattr(m_rotor_fd, TCSANOW, &options);
+						}
+						else
+							eWarning("[eDVBFrontend] opening %s failed: %m", rotor_name.c_str());
+					}
+					else
+						eWarning("[eDVBFrontend] external rotor %s already opened", rotor_name.c_str());
+				}
+			} else
+				eWarning("Not enough lines in /etc/rotor");
+			rotor_cfg.close();
+		} else
+			eWarning("Cannot open /etc/rotor");
+
 		if (m_simulate_fe)
 		{
 			m_simulate_fe->m_delsys = m_delsys;
@@ -689,6 +742,14 @@ int eDVBFrontend::closeFrontend(bool force, bool no_delayed)
 	{
 		setTone(iDVBFrontend::toneOff);
 		setVoltage(iDVBFrontend::voltageOff);
+	}
+
+	if (m_rotor_fd >= 0)
+	{
+		if (!::close(m_rotor_fd))
+			m_rotor_fd=-1;
+		else
+			eWarning("[eDVBFrontend] couldnt close rotor fd for frontend %d", m_dvbid);
 	}
 
 	m_sn=0;
@@ -1201,6 +1262,29 @@ int eDVBFrontend::readInputpower()
 {
 	if (m_simulate)
 		return 0;
+	//since readInputpower is only used to
+	//  a) detect if the frontend is capable of measuring it by returning a value > 0
+	//  b) detect if the motor is turning
+	//
+	// with an external positioner we just simulate it
+	if (m_rotor_fd>=0)
+	{
+		char c=0x77;
+		::tcflush(m_rotor_fd,TCIFLUSH);
+		if (::write(m_rotor_fd, &c, 1)!=1)
+		{
+			eWarning("[eDVBFrontend] error asking status to external rotor %m");
+			return -1;
+		}
+		if (::read(m_rotor_fd, &c, 1)!=1)
+		{
+			eWarning("[eDVBFrontend] error reading status from external rotor %m");
+			return -1;
+		}
+		if (c!=0) //motor moving or error
+			return 400; //simulate high current
+		return 10; //idle current
+	}
 	int power=m_slotid;  // this is needed for read inputpower from the correct tuner !
 	char proc_name[64];
 	sprintf(proc_name, "/proc/stb/frontend/%d/lnb_sense", m_slotid);
@@ -2241,6 +2325,15 @@ RESULT eDVBFrontend::sendDiseqc(const eDVBDiseqcCommand &diseqc)
 	struct dvb_diseqc_master_cmd cmd;
 	if (m_simulate)
 		return 0;
+	if (m_rotor_fd>=0 && diseqc.data[1]==0x31)
+	{
+		if (::write(m_rotor_fd, &diseqc.data[2], diseqc.len-2)!=diseqc.len-2)
+		{
+			eWarning("[eDVBFrontend] error sending to external rotor %m");
+			return -EINVAL;
+		}
+		return 0;
+	}
 	memcpy(cmd.msg, diseqc.data, diseqc.len);
 	cmd.msg_len = diseqc.len;
 	if (::ioctl(m_fd, FE_DISEQC_SEND_MASTER_CMD, &cmd))
