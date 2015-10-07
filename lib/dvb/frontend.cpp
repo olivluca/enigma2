@@ -610,8 +610,8 @@ int eDVBFrontend::openFrontend()
 			}
 		}
 
-		//HACK - check if this frontend uses an external actuator
-		std::ifstream rotor_cfg("/etc/rotor");
+		//HACK - check if this frontend uses an external rotor
+		std::ifstream rotor_cfg("/etc/external_rotor");
 		if (rotor_cfg.good())
 		{
 			std::string frontend_name;
@@ -656,10 +656,10 @@ int eDVBFrontend::openFrontend()
 						eWarning("[eDVBFrontend] external rotor %s already opened", rotor_name.c_str());
 				}
 			} else
-				eWarning("Not enough lines in /etc/rotor");
+				eWarning("[eDVBFrontend] not enough lines in /etc/external_rotor");
 			rotor_cfg.close();
 		} else
-			eWarning("Cannot open /etc/rotor");
+			eWarning("[eDVBFrontend] cannot open /etc/external_rotor");
 
 		if (m_simulate_fe)
 		{
@@ -2325,7 +2325,8 @@ RESULT eDVBFrontend::sendDiseqc(const eDVBDiseqcCommand &diseqc)
 	struct dvb_diseqc_master_cmd cmd;
 	if (m_simulate)
 		return 0;
-	if (m_rotor_fd>=0 && diseqc.data[1]==0x31)
+	//redirect commands to external rotor
+	if (m_rotor_fd>=0 && diseqc.len>2 && diseqc.data[1]==0x31)
 	{
 		if (::write(m_rotor_fd, &diseqc.data[2], diseqc.len-2)!=diseqc.len-2)
 		{
