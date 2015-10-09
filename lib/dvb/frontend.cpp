@@ -1269,7 +1269,7 @@ int eDVBFrontend::readInputpower()
 	// with an external positioner we just simulate it
 	if (m_rotor_fd>=0)
 	{
-		char c=0x77;
+		char c=0x64; //read positioner status register
 		::tcflush(m_rotor_fd,TCIFLUSH);
 		if (::write(m_rotor_fd, &c, 1)!=1)
 		{
@@ -1281,8 +1281,16 @@ int eDVBFrontend::readInputpower()
 			eWarning("[eDVBFrontend] error reading status from external rotor %m");
 			return -1;
 		}
-		if (c!=0) //motor moving or error
-			return 400; //simulate high current
+		//bit 0 -> position reference data has been lost or corrupted
+		//    1 -> hardware limit switch
+		//    2 -> power is not available
+		//    3 -> software limit reached
+		//    4 -> motor is running
+		//    5 -> last direction west
+		//    6 -> software limits enabled
+		//    7 -> movement command has been completed
+		if ((c & 0x1f) !=0) //with error or motor moving...
+			return 400; //...simulate high current
 		return 10; //idle current
 	}
 	int power=m_slotid;  // this is needed for read inputpower from the correct tuner !
