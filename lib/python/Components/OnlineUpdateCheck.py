@@ -10,8 +10,7 @@ from Components.Ipkg import IpkgComponent
 from Components.config import config
 from Components.About import about
 
-import urllib2 
-import socket
+import urllib2, socket, sys
 
 error = 0
 
@@ -25,30 +24,43 @@ class FeedsStatusCheck:
 		self.ipkg = IpkgComponent()
 		self.ipkg.addCallback(self.ipkgCallback)
 
+	def IsInt(self, val):
+		try: 
+			int(val)
+			return True
+		except ValueError:
+			return False
+
 	def getFeedSatus(self):
 		status = '1'
 		trafficLight = 'unknown'
 		if about.getIfConfig('eth0').has_key('addr') or about.getIfConfig('eth1').has_key('addr') or about.getIfConfig('wlan0').has_key('addr') or about.getIfConfig('ra0').has_key('addr'):
 			try:
+				print '[OnlineVersionCheck] Checking feeds state'
 				req = urllib2.Request('http://openvix.co.uk/TrafficLightState.php')
 				d = urllib2.urlopen(req)
 				trafficLight = d.read()
 			except urllib2.HTTPError, err:
-				print 'ERROR:',err
+				print '[OnlineVersionCheck] ERROR:',err
 				trafficLight = err.code
 			except urllib2.URLError, err:
-				print 'ERROR:',err.reason[0]
+				print '[OnlineVersionCheck] ERROR:',err.reason[0]
 				trafficLight = err.reason[0]
 			except urllib2, err:
-				print 'ERROR:',err
+				print '[OnlineVersionCheck] ERROR:',err
 				trafficLight = err
-			if not trafficLight.isdigit() and getImageType() != 'release':
+			except:
+				print '[OnlineVersionCheck] ERROR:', sys.exc_info()[0]
+				trafficLight = -2
+			if not self.IsInt(trafficLight) and getImageType() != 'release':
 				trafficLight = 'unknown'
 			elif trafficLight == 'stable':
 				status = '0'
 			config.softwareupdate.updateisunstable.setValue(status)
+			print '[OnlineVersionCheck] PASSED:',trafficLight
 			return trafficLight
 		else:
+			print '[OnlineVersionCheck] ERROR: -2'
 			return -2
 
 	def getFeedsBool(self):
@@ -154,7 +166,7 @@ class VersionCheck:
 				print '[OnlineVersionCheck] New Release updates found'
 				return True
 			else:
-				print '[OnlineVersionCheck] skipping as beta is not wanted'
+				print '[OnlineVersionCheck] skipping as unstable is not wanted'
 				return False
 		else:
 			return False

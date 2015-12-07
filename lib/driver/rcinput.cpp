@@ -19,6 +19,8 @@ void eRCDeviceInputDev::handleCode(long rccode)
 
 	if (ev->type != EV_KEY)
 		return;
+		
+	eDebug("[eInputDeviceInit] %x %x %x", ev->value, ev->code, ev->type);
 
 	int km = iskeyboard ? input->getKeyboardMode() : eRCInput::kmNone;
 
@@ -91,7 +93,7 @@ void eRCDeviceInputDev::handleCode(long rccode)
 #if KEY_PLAY_ACTUALLY_IS_KEY_PLAYPAUSE
 	if (ev->code == KEY_PLAY)
 	{
-		if (id == "dreambox advanced remote control (native)")
+		if ((id == "dreambox advanced remote control (native)")  || (id == "bcm7325 remote control"))
 		{
 			/* 8k rc has a KEY_PLAYPAUSE key, which sends KEY_PLAY events. Correct this, so we do not have to place hacks in the keymaps. */
 			ev->code = KEY_PLAYPAUSE;
@@ -192,7 +194,7 @@ public:
 				return;
 			}
 		}
-		eDebug("Remove '%s', not found", filename);
+		eDebug("[eInputDeviceInit] Remove '%s', not found", filename);
 	}
 
 	void addAll(void)
