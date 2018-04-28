@@ -64,23 +64,23 @@ class OscamInfo:
 						data = data.split("-")[0]
 					except:
 						try:
-							print 'OScaminfo - oscam start-command is not as "/oscam-binary -parameter /config-folder" executed, using hard-coded config dir'
+							print '[OScaminfo] oscam start-command is not as "/oscam-binary -parameter /config-folder" executed, using hard-coded config dir'
 							cmd = binary + ' -V | grep ConfigDir'
 							res = os.popen(cmd).read()
 							data = res.split(":")[1]
 						except:
-							print 'OScaminfo - oscam binary appears to be broken'
+							print '[OScaminfo] oscam binary appears to be broken'
 							return None
 					data = data.strip() + '/oscam.conf'
 					if os.path.exists(data):
-						print 'OScaminfo - config file "%s" ' % data
+						print '[OScaminfo] config file "%s" ' % data
 						return data
-					print 'OScaminfo - config file "%s" not found' % data
+					print '[OScaminfo] config file "%s" not found' % data
 					return None
 			elif int(data) > 1:
-				print 'OScaminfo - more than one(%s) oscam binarys are active'  % data
+				print '[OScaminfo] more than one(%s) oscam binarys are active'  % data
 				return None
-		print 'OScaminfo - no active oscam binarys found'
+		print '[OScaminfo] no active oscam binarys found'
 		return None
 
 	def getUserData(self):
@@ -171,7 +171,7 @@ class OscamInfo:
 			elif hasattr(e, "code"):
 				err = str(e.code)
 		if err is not False:
-			print "[openWebIF] Fehler: %s" % err
+			print "[OScaminfo] Fehler: %s" % err
 			return False, err
 		else:
 			return True, data
@@ -375,10 +375,22 @@ class oscMenuList(MenuList):
 		self.l.setFont(7, gFont("Regular", 24))
 
 class OscamInfoMenu(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path = ""):
+		Screen.__init__(self, session)
+		screentitle = _("Oscam Info - Main Menu")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.session = session
 		self.menu = [ _("Show /tmp/ecm.info"), _("Show Clients"), _("Show Readers/Proxies"), _("Show Log"), _("Card infos (CCcam-Reader)"), _("ECM Statistics"), _("Setup") ]
-		Screen.__init__(self, session)
 		self.osc = OscamInfo()
 		self["mainmenu"] = oscMenuList([])
 		self["actions"] = NumberActionMap(["OkCancelActions", "InputActions", "ColorActions"],
@@ -555,13 +567,14 @@ class OscamInfoMenu(Screen):
 		return menuentries
 	def showMenu(self):
 		entr = self.buildMenu(self.menu)
-		self.setTitle(_("Oscam Info - Main Menu"))
 		self["mainmenu"].l.setList(entr)
 		self["mainmenu"].moveToIndex(0)
 
 class oscECMInfo(Screen, OscamInfo):
 	def __init__(self, session):
 		Screen.__init__(self, session)
+		self.setup_title = _("Oscam ECM-info")
+		Screen.setTitle(self, _(self.setup_title))
 		self.ecminfo = "/tmp/ecm.info"
 		self["output"] = oscMenuList([])
 		if config.oscaminfo.autoupdate.value:
@@ -1139,7 +1152,7 @@ class oscReaderStats(Screen, OscamInfo):
 								try:
 									last_req = lastreq.split("T")[1][:-5]
 								except IndexError:
-									last_req = time.strftime("%H:%M:%S",time.localtime(float(lastreq)))
+									last_req = time.strftime(config.usage.time.long.value, time.localtime(float(lastreq)))
 							else:
 								last_req = ""
 						else:

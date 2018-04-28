@@ -156,18 +156,36 @@ time_t parseDVBtime(const uint8_t *data, uint16_t *hash)
 	return timegm(&t);
 }
 
-TDT::TDT(eDVBChannel *chan, int update_count)
+TimeTable::TimeTable(eDVBChannel *chan, int update_count)
 	:chan(chan), m_interval_timer(eTimer::create()), update_count(update_count)
 {
-	CONNECT(tableReady, TDT::ready);
-	CONNECT(m_interval_timer->timeout, TDT::start);
+	CONNECT(tableReady, TimeTable::ready);
+	CONNECT(m_interval_timer->timeout, TimeTable::start);
 	if (chan)
 		chan->getDemux(demux, 0);
 }
 
-void TDT::ready(int error)
+void TimeTable::ready(int error)
 {
 	eDVBLocalTimeHandler::getInstance()->updateTime(error, chan, ++update_count);
+}
+
+void TimeTable::startTable(eDVBTableSpec spec)
+{
+	if (chan && demux)
+	{
+		eGTable::start(demux, spec);
+	}
+}
+
+void TimeTable::startTimer( int interval )
+{
+	m_interval_timer->start(interval, true);
+}
+
+TDT::TDT(eDVBChannel *chan, int update_count)
+	: TimeTable(chan, update_count)
+{
 }
 
 int TDT::createTable(unsigned int nr, const uint8_t *data, unsigned int max)
@@ -189,25 +207,35 @@ int TDT::createTable(unsigned int nr, const uint8_t *data, unsigned int max)
 
 void TDT::start()
 {
-	if ( chan )
-	{
-		eDVBTableSpec spec;
-		spec.pid = TimeAndDateSection::PID;
-		spec.tid = TimeAndDateSection::TID;
-		spec.tid_mask = 0xFC;
-		spec.timeout = TimeAndDateSection::TIMEOUT;
-		spec.flags= eDVBTableSpec::tfAnyVersion |
-					eDVBTableSpec::tfHaveTID |
-					eDVBTableSpec::tfHaveTIDMask |
-					eDVBTableSpec::tfHaveTimeout;
-		if ( demux )
-			eGTable::start( demux, spec );
-	}
+	eDVBTableSpec spec;
+	spec.pid = TimeAndDateSection::PID;
+	spec.tid = TimeAndDateSection::TID;
+	spec.tid_mask = 0xFC;
+	spec.timeout = TimeAndDateSection::TIMEOUT;
+	spec.flags= eDVBTableSpec::tfAnyVersion |
+				eDVBTableSpec::tfHaveTID |
+				eDVBTableSpec::tfHaveTIDMask |
+				eDVBTableSpec::tfHaveTimeout;
+	TimeTable::startTable(spec);
 }
 
-void TDT::startTimer( int interval )
+STT::STT(eDVBChannel *chan, int update_count)
+	: TimeTable(chan, update_count)
 {
-	m_interval_timer->start(interval, true);
+}
+
+void STT::start()
+{
+	TimeTable::startTable(eDVBSTTSpec());
+}
+
+int STT::createTable(unsigned int nr, const uint8_t *data, unsigned int max)
+{
+	SystemTimeTableSection section(data);
+	time_t tptime = section.getSystemTime() - (time_t)section.getGPSOffset() + (time_t)315964800; /* ATSC GPS system time epoch is 00:00 Jan 6th 1980 */
+	eDVBLocalTimeHandler::getInstance()->updateTime(tptime, chan, update_count);
+	error = 0;
+	return 1;
 }
 
 eDVBLocalTimeHandler *eDVBLocalTimeHandler::instance;
@@ -224,20 +252,8 @@ eDVBLocalTimeHandler::eDVBLocalTimeHandler()
 		eDebug("[eDVBLocalTimerHandler] no resource manager !!!!!!!");
 	else
 	{
-		res_mgr->connectChannelAdded(slot(*this,&eDVBLocalTimeHandler::DVBChannelAdded), m_chanAddedConn);
-		time_t now = time(0);
-		if ( now < 1072224000 ) // 01.01.2004
-			eDebug("[eDVBLocalTimeHandler] RTC not ready... wait for transponder time");
-		else // inform all who's waiting for valid system time..
-		{
-			eDebug("[eDVBLocalTimeHandler] Use valid Linux Time :) (RTC?)");
-			noRTC();
-			if (strncmp(mybox,"gb800solo", sizeof(mybox)) == 0 || strncmp(mybox,"gb800se", sizeof(mybox)) == 0 || strncmp(mybox,"gb800ue", sizeof(mybox)) == 0)
-				m_time_ready = false; //sorry no RTC
-			else
-				m_time_ready = true;
-			/*emit*/ m_timeUpdated();
-		}
+		res_mgr->connectChannelAdded(sigc::mem_fun(*this,&eDVBLocalTimeHandler::DVBChannelAdded), m_chanAddedConn);
+		eDebug("[eDVBLocalTimeHandler] RTC not ready... wait for transponder time");
 	}
 	CONNECT(m_updateNonTunedTimer->timeout, eDVBLocalTimeHandler::updateNonTuned);
 }
@@ -296,11 +312,13 @@ void eDVBLocalTimeHandler::setUseDVBTime(bool b)
 		if (!b)
 		{
 			time_t now = time(0);
-			if (now < 1072224000) /* 01.01.2004 */
+			if (now < timeOK) /* 01.01.2004 */
 			{
 				eDebug("[eDVBLocalTimeHandler] invalid system time, refuse to disable transponder time sync");
 				return;
 			}
+			else
+				m_time_ready = true;
 		}
 		if (m_use_dvb_time) {
 			eDebug("[eDVBLocalTimeHandler] disable sync local time with transponder time!");
@@ -308,7 +326,9 @@ void eDVBLocalTimeHandler::setUseDVBTime(bool b)
 				m_knownChannels.begin();
 			for (; it != m_knownChannels.end(); ++it) {
 				if (it->second.m_prevChannelState == iDVBChannel::state_ok)
-					it->second.tdt = 0;
+				{
+					it->second.timetable = NULL;
+				}
 			}
 		}
 		else {
@@ -317,12 +337,58 @@ void eDVBLocalTimeHandler::setUseDVBTime(bool b)
 				m_knownChannels.begin();
 			for (; it != m_knownChannels.end(); ++it) {
 				if (it->second.m_prevChannelState == iDVBChannel::state_ok) {
-					it->second.tdt = new TDT(it->second.channel);
-					it->second.tdt->start();
+					int system = iDVBFrontend::feSatellite;
+					ePtr<iDVBFrontendParameters> parms;
+					it->second.channel->getCurrentFrontendParameters(parms);
+					if (parms)
+					{
+						parms->getSystem(system);
+					}
+
+					it->second.timetable = NULL;
+					if (system == iDVBFrontend::feATSC)
+					{
+						it->second.timetable = new STT(it->second.channel);
+					}
+					else
+					{
+						it->second.timetable = new TDT(it->second.channel);
+					}
+					it->second.timetable->start();
 				}
 			}
 		}
 		m_use_dvb_time = b;
+	}
+}
+
+void eDVBLocalTimeHandler::syncDVBTime()
+{
+	eDebug("[eDVBLocalTimeHandler] sync local time with transponder time!");
+	std::map<iDVBChannel*, channel_data>::iterator it = m_knownChannels.begin();
+	for (; it != m_knownChannels.end(); ++it)
+	{
+		if (it->second.m_prevChannelState == iDVBChannel::state_ok)
+		{
+			int system = iDVBFrontend::feSatellite;
+			ePtr<iDVBFrontendParameters> parms;
+			it->second.channel->getCurrentFrontendParameters(parms);
+			if (parms)
+			{
+				parms->getSystem(system);
+			}
+
+			it->second.timetable = NULL;
+			if (system == iDVBFrontend::feATSC)
+			{
+				it->second.timetable = new STT(it->second.channel);
+			}
+			else
+			{
+				it->second.timetable = new TDT(it->second.channel);
+			}
+			it->second.timetable->start();
+		}
 	}
 }
 
@@ -341,45 +407,37 @@ void eDVBLocalTimeHandler::updateTime( time_t tp_time, eDVBChannel *chan, int up
 	else if (tp_time == -1)
 	{
 		restart_tdt = true;
-		/*if ( eSystemInfo::getInstance()->getHwType() == eSystemInfo::DM7020 ||
-		( eSystemInfo::getInstance()->getHwType() == eSystemInfo::DM7000
-			&& eSystemInfo::getInstance()->hasStandbyWakeupTimer() ) )     TODO !!!!!!! */
+
+		eDebug("[eDVBLocalTimerHandler] no transponder tuned... or no TDT/TOT avail .. try to use RTC :)");
+		time_t rtc_time = getRTC();
+		if (rtc_time) // RTC Ready?
 		{
-			eDebug("[eDVBLocalTimerHandler] no transponder tuned... or no TDT/TOT avail .. try to use RTC :)");
-			time_t rtc_time = getRTC();
-			if ( rtc_time ) // RTC Ready?
+			tm now;
+
+			localtime_r(&rtc_time, &now);
+			eDebug("[eDVBLocalTimerHandler] RTC time is %02d:%02d:%02d", now.tm_hour, now.tm_min, now.tm_sec);
+			time_t linuxTime=time(0);
+			localtime_r(&linuxTime, &now);
+			eDebug("[eDVBLocalTimerHandler] Receiver time is %02d:%02d:%02d", now.tm_hour, now.tm_min, now.tm_sec);
+			time_difference = rtc_time - linuxTime;
+			eDebug("[eDVBLocalTimerHandler] RTC to Receiver time difference is %ld seconds", linuxTime - rtc_time );
+
+			if (time_difference)
 			{
-				tm now;
-				localtime_r(&rtc_time, &now);
-				eDebug("[eDVBLocalTimerHandler] RTC time is %02d:%02d:%02d",
-					now.tm_hour,
-					now.tm_min,
-					now.tm_sec);
-				time_t linuxTime=time(0);
-				localtime_r(&linuxTime, &now);
-				eDebug("[eDVBLocalTimerHandler] Receiver time is %02d:%02d:%02d",
-					now.tm_hour,
-					now.tm_min,
-					now.tm_sec);
-				time_difference = rtc_time - linuxTime;
-				eDebug("[eDVBLocalTimerHandler] RTC to Receiver time difference is %ld seconds", linuxTime - rtc_time );
-				if ( time_difference )
-				{
-					eDebug("[eDVBLocalTimerHandler] set Linux Time to RTC Time");
-					timeval tnow;
-					gettimeofday(&tnow,0);
-					tnow.tv_sec=rtc_time;
-					settimeofday(&tnow,0);
-				}
-				else if ( !time_difference )
-					eDebug("[eDVBLocalTimerHandler] no change needed");
-				else
-					eDebug("[eDVBLocalTimerHandler] set to RTC time");
-				/*emit*/ m_timeUpdated();
+				eDebug("[eDVBLocalTimerHandler] set Linux Time to RTC Time");
+				timeval tnow;
+				gettimeofday(&tnow, 0);
+				tnow.tv_sec = rtc_time;
+				settimeofday(&tnow, 0);
 			}
+			else if ( !time_difference )
+				eDebug("[eDVBLocalTimerHandler] no change needed");
 			else
-				eDebug("[eDVBLocalTimerHandler]    getRTC returned time=0. RTC problem?");
+				eDebug("[eDVBLocalTimerHandler] set to RTC time");
+			/*emit*/ m_timeUpdated();
 		}
+		else
+			eDebug("[eDVBLocalTimerHandler]    getRTC returned time=0. RTC problem?");
 	}
 	else
 	{
@@ -499,11 +557,36 @@ void eDVBLocalTimeHandler::updateTime( time_t tp_time, eDVBChannel *chan, int up
 
 		if ( time_difference )
 		{
-			eDebug("[eDVBLocalTimerHandler] set Linux Time");
-			timeval tnow;
-			gettimeofday(&tnow,0);
-			tnow.tv_sec=t;
-			settimeofday(&tnow,0);
+			if ( (time_difference >= -15) && (time_difference <= 15) )
+			{
+				// Slew small diffs ...
+				// Even good transponders can differ by 0-5 sec, if we would step these
+				// the system clock would permanentely jump around when zapping.
+				timeval tdelta, tolddelta;
+				tdelta.tv_sec=time_difference;
+				int rc=adjtime(&tdelta,&tolddelta);
+				if(rc==0) {
+					eDebug("[eDVBLocalTimerHandler] slewing Linux Time by %03d seconds", time_difference);
+				}
+				else
+				{
+					eDebug("[eDVBLocalTimerHandler] slewing Linux Time by %03d seconds FAILED", time_difference);
+				}
+			}
+			else
+			{
+				// ... only step larger diffs
+				timeval tnow;
+				gettimeofday(&tnow,0);
+				tnow.tv_sec=t;
+				settimeofday(&tnow,0);
+				linuxTime=time(0);
+				localtime_r(&linuxTime, &now);
+				eDebug("[eDVBLocalTimerHandler] stepped Linux Time to %02d:%02d:%02d",
+				now.tm_hour,
+				now.tm_min,
+				now.tm_sec);
+			}
 		}
 
  		 /*emit*/ m_timeUpdated();
@@ -515,10 +598,26 @@ void eDVBLocalTimeHandler::updateTime( time_t tp_time, eDVBChannel *chan, int up
 			m_knownChannels.find(chan);
 		if ( it != m_knownChannels.end() )
 		{
-			int updateCount = it->second.tdt->getUpdateCount();
-			it->second.tdt = 0;
-			it->second.tdt = new TDT(chan, updateCount);
-			it->second.tdt->startTimer(TIME_UPDATE_INTERVAL);  // restart TDT for this transponder in 30min
+			int system = iDVBFrontend::feSatellite;
+			ePtr<iDVBFrontendParameters> parms;
+			chan->getCurrentFrontendParameters(parms);
+			if (parms)
+			{
+				parms->getSystem(system);
+			}
+
+			int updateCount = it->second.timetable->getUpdateCount();
+			it->second.timetable = NULL;
+
+			if (system == iDVBFrontend::feATSC)
+			{
+				it->second.timetable = new STT(chan, updateCount);
+			}
+			else
+			{
+				it->second.timetable = new TDT(chan, updateCount);
+			}
+			it->second.timetable->startTimer(TIME_UPDATE_INTERVAL); // restart TDT for this transponder in 30min
 		}
 	}
 }
@@ -530,10 +629,10 @@ void eDVBLocalTimeHandler::DVBChannelAdded(eDVBChannel *chan)
 //		eDebug("[eDVBLocalTimerHandler] add channel %p", chan);
 		std::pair<std::map<iDVBChannel*, channel_data>::iterator, bool> tmp =
 			m_knownChannels.insert( std::pair<iDVBChannel*, channel_data>(chan, channel_data()) );
-		tmp.first->second.tdt = NULL;
+		tmp.first->second.timetable = NULL;
 		tmp.first->second.channel = chan;
 		tmp.first->second.m_prevChannelState = -1;
-		chan->connectStateChange(slot(*this, &eDVBLocalTimeHandler::DVBChannelStateChanged), tmp.first->second.m_stateChangedConn);
+		chan->connectStateChange(sigc::mem_fun(*this, &eDVBLocalTimeHandler::DVBChannelStateChanged), tmp.first->second.m_stateChangedConn);
 	}
 }
 
@@ -547,14 +646,30 @@ void eDVBLocalTimeHandler::DVBChannelStateChanged(iDVBChannel *chan)
 		chan->getState(state);
 		if ( state != it->second.m_prevChannelState )
 		{
+			int system = iDVBFrontend::feSatellite;
+			ePtr<iDVBFrontendParameters> parms;
+			it->second.channel->getCurrentFrontendParameters(parms);
+			if (parms)
+			{
+				parms->getSystem(system);
+			}
+
 			switch (state)
 			{
 				case iDVBChannel::state_ok:
 					eDebug("[eDVBLocalTimerHandler] channel %p running", chan);
 					m_updateNonTunedTimer->stop();
 					if (m_use_dvb_time) {
-						it->second.tdt = new TDT(it->second.channel);
-						it->second.tdt->start();
+						it->second.timetable = NULL;
+						if (system == iDVBFrontend::feATSC)
+						{
+							it->second.timetable = new STT(it->second.channel);
+						}
+						else
+						{
+							it->second.timetable = new TDT(it->second.channel);
+						}
+						it->second.timetable->start();
 					}
 					break;
 				case iDVBChannel::state_release:

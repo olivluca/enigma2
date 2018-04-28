@@ -125,6 +125,7 @@ public:
 	void sendCAPMT();
 	int writeCAPMTObject(eSocket *socket, int list_management = -1);
 	int buildCAPMT(eTable<ProgramMapSection> *ptr);
+	int buildCAPMT(ePtr<eDVBService> &dvbservice);
 	void connectionLost();
 };
 
@@ -135,11 +136,11 @@ typedef std::map<eServiceReferenceDVB, eDVBCAService*> CAServiceMap;
 SWIG_IGNORE(iCryptoInfo);
 class iCryptoInfo : public iObject
 {
+public:
 #ifdef SWIG
 	iCryptoInfo();
 	~iCryptoInfo();
 #endif
-public:
 	PSignal1<void, const char*> clientname;
 	PSignal1<void, const char*> clientinfo;
 	PSignal1<void, const char*> verboseinfo;
@@ -176,6 +177,7 @@ public:
 	int registerService(const eServiceReferenceDVB &service, int adapter, int demux_nums[2], int servicetype, eDVBCAService *&caservice);
 	int unregisterService(const eServiceReferenceDVB &service , int adapter, int demux_nums[2], eTable<ProgramMapSection> *ptr);
 	void handlePMT(const eServiceReferenceDVB &service, ePtr<eTable<ProgramMapSection> > &ptr);
+	void handlePMT(const eServiceReferenceDVB &service, ePtr<eDVBService> &dvbservice);
 	void connectionLost(ePMTClient *client);
 
 	static eDVBCAHandler *getInstance() { return instance; }

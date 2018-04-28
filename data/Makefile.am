@@ -13,9 +13,9 @@ dist_pkgdata_DATA = \
 	videowizard.xml \
 	freesat.t1 \
 	freesat.t2 \
-	timezone.xml \
 	unicable.xml \
 	hd-testcard.mvi \
+	iso-639-3.pck \
 	distro-logo.png
 
 if HAVE_TEXTLCD
@@ -46,6 +46,10 @@ if HAVE_COLORLCD720
 SUBDIRS += display720
 endif
 
+if HAVE_COLORLCD800
+SUBDIRS += display800
+endif
+
 if HAVE_BWLCD255
 SUBDIRS += vfd255
 endif
@@ -57,3 +61,6 @@ endif
 if HAVE_BWLCD128
 SUBDIRS += vfd128
 endif
+
+iso-639-3.pck: $(srcdir)/iso-639-3.tab
+	python $(srcdir)/convert-iso-639-3.py $< $@

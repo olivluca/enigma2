@@ -115,13 +115,15 @@ void eListboxServiceContent::getCurrent(eServiceReference &ref)
 
 void eListboxServiceContent::getPrev(eServiceReference &ref)
 {
+	list::iterator cursor;
+
 	if (cursorValid())
 	{
-		list::iterator cursor(m_cursor);
+		cursor = m_cursor;
+
 		if (cursor == m_list.begin())
-		{
 			cursor = m_list.end();
-		}
+
 		ref = *(--cursor);
 	}
 	else
@@ -130,15 +132,18 @@ void eListboxServiceContent::getPrev(eServiceReference &ref)
 
 void eListboxServiceContent::getNext(eServiceReference &ref)
 {
+	list::iterator cursor;
+
 	if (cursorValid())
 	{
-		list::iterator cursor(m_cursor);
+		cursor = m_cursor;
+
 		cursor++;
+
 		if (cursor == m_list.end())
-		{
 			cursor = m_list.begin();
-		}
- 		ref = *(cursor);
+
+		ref = *(cursor);
 	}
 	else
 		ref = eServiceReference();
@@ -312,7 +317,7 @@ void eListboxServiceContent::sort()
 DEFINE_REF(eListboxServiceContent);
 
 eListboxServiceContent::eListboxServiceContent()
-	:m_visual_mode(visModeSimple), m_size(0), m_current_marked(false), m_itemheight(25), m_servicetype_icon_mode(0), m_crypto_icon_mode(0), m_column_width(0), m_progressbar_height(6), m_progressbar_border_width(2), m_record_indicator_mode(0), m_nonplayable_margins(10), m_items_distances(8)
+	:m_visual_mode(visModeSimple), m_size(0), m_current_marked(false), m_itemheight(25), m_servicetype_icon_mode(0), m_crypto_icon_mode(0), m_record_indicator_mode(0), m_column_width(0), m_progressbar_height(6), m_progressbar_border_width(2), m_nonplayable_margins(10), m_items_distances(8)
 {
 	memset(m_color_set, 0, sizeof(m_color_set));
 	cursorHome();
@@ -592,8 +597,14 @@ bool eListboxServiceContent::checkServiceIsRecorded(eServiceReference ref)
 		{
 			ePtr<iDVBChannelList> db;
 			ePtr<eDVBResourceManager> res;
-			eDVBResourceManager::getInstance(res);
-			res->getChannelList(db);
+			if (eDVBResourceManager::getInstance(res) == -1)
+			{
+				return false;
+			}
+			if (res->getChannelList(db) < 0)
+			{
+				return false;
+			}
 			eBouquet *bouquet = NULL;
 			if (!db->getBouquet(ref, bouquet))
 			{
@@ -937,7 +948,7 @@ void eListboxServiceContent::paint(gPainter &painter, eWindowStyle &style, const
 							}
 							int correction = (area.height() - pixmap_size.height()) / 2;
 							area.moveBy(offset);
-							if (service_info->isCrypted())
+							if (service_info && service_info->isCrypted())
 							{
 								if (m_crypto_icon_mode == 2)
 								{

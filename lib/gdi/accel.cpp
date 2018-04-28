@@ -44,6 +44,8 @@ extern void bcm_accel_fill(
 		int x, int y, int width, int height,
 		unsigned long color);
 extern bool bcm_accel_has_alphablending();
+extern int bcm_accel_accumulate();
+extern int bcm_accel_sync();
 #endif
 
 gAccel::gAccel():
@@ -218,6 +220,28 @@ int gAccel::fill(gUnmanagedSurface *dst, const eRect &area, unsigned long col)
 	return -1;
 }
 
+int gAccel::accumulate()
+{
+#ifdef BCM_ACCEL
+	if (!m_bcm_accel_state)
+	{
+		return bcm_accel_accumulate();
+	}
+#endif
+	return -1;
+}
+
+int gAccel::sync()
+{
+#ifdef BCM_ACCEL
+	if (!m_bcm_accel_state)
+	{
+		return bcm_accel_sync();
+	}
+#endif
+	return -1;
+}
+
 int gAccel::accelAlloc(gUnmanagedSurface* surface)
 {
 	int stride = (surface->stride + ACCEL_ALIGNMENT_MASK) & ~ACCEL_ALIGNMENT_MASK;
@@ -268,7 +292,7 @@ int gAccel::accelAlloc(gUnmanagedSurface* surface)
 		}
 	}
 
-	eDebug("[gAccel] alloc failed\n");
+	eDebug("[gAccel] alloc failed");
 	return -3;
 }
 

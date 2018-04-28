@@ -36,6 +36,11 @@ class SetupSummary(Screen):
 		self["SetupValue"].text = self.parent.getCurrentValue()
 		if hasattr(self.parent,"getCurrentDescription"):
 			self.parent["description"].text = self.parent.getCurrentDescription()
+		if self.parent.has_key('footnote'):
+			if self.parent.getCurrentEntry().endswith('*'):
+				self.parent['footnote'].text = (_("* = Restart Required"))
+			else:
+				self.parent['footnote'].text = ("")
 
 class TimeshiftSettings(Screen,ConfigListScreen):
 	def removeNotifier(self):
@@ -55,9 +60,11 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 			self.setup_title = x.get("title", "").encode("UTF-8")
 			self.seperation = int(x.get('separation', '0'))
 
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
+		self.menu_path = menu_path
 		self.skinName = "Setup"
+		self["menu_path_compressed"] = StaticText()
 		self['footnote'] = Label()
 		self["HelpWindow"] = Pixmap()
 		self["HelpWindow"].hide()
@@ -65,7 +72,7 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 
 		self["key_red"] = StaticText(_("Cancel"))
 		self["key_green"] = StaticText(_("Save"))
-		self["description"] = Label(_(""))
+		self["description"] = Label("")
 
 		self.onChangedEntry = [ ]
 		self.setup = "timeshift"
@@ -95,15 +102,6 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 				self.createSetup()
 		except:
 			pass
-
-	def getCurrentEntry(self):
-		return self["config"].getCurrent() and self["config"].getCurrent()[0] or ""
-
-	def getCurrentValue(self):
-		return self["config"].getCurrent() and str(self["config"].getCurrent()[1].getText()) or ""
-
-	def getCurrentDescription(self):
-		return self["config"].getCurrent() and len(self["config"].getCurrent()) > 2 and self["config"].getCurrent()[2] or ""
 
 	def checkReadWriteDir(self, configele):
 		import os.path
@@ -169,7 +167,17 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 			self["config"].list.sort()
 
 	def layoutFinished(self):
-		self.setTitle(_(self.setup_title))
+		if config.usage.show_menupath.value == 'large' and self.menu_path:
+			title = self.menu_path + _(self.setup_title)
+			self["menu_path_compressed"].setText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = _(self.setup_title)
+			self["menu_path_compressed"].setText(self.menu_path + " >" if not self.menu_path.endswith(' / ') else self.menu_path[:-3] + " >" or "")
+		else:
+			title = _(self.setup_title)
+			self["menu_path_compressed"].setText("")
+		self.setup_title = title
+		self.setTitle(title)
 
 	def ok(self):
 		currentry = self["config"].getCurrent()
@@ -220,11 +228,6 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 					type = MessageBox.TYPE_ERROR
 					)
 
-	def saveAll(self):
-		for x in self["config"].list:
-			x[1].save()
-		configfile.save()
-
 	# keySave and keyCancel are just provided in case you need them.
 	# you have to call them by yourself.
 	def keySave(self):
@@ -267,19 +270,6 @@ class TimeshiftSettings(Screen,ConfigListScreen):
 				config.timeshift.startdelay.setValue(0)
 				self.saveAll()
 				self.close()
-
-	def cancelConfirm(self, result):
-		if not result:
-			return
-		for x in self["config"].list:
-			x[1].cancel()
-		self.close()
-
-	def keyCancel(self):
-		if self["config"].isChanged():
-			self.session.openWithCallback(self.cancelConfirm, MessageBox, _("Really close without saving settings?"), default = False)
-		else:
-			self.close()
 
 	def createSummary(self):
 		return SetupSummary

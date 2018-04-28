@@ -71,7 +71,10 @@ class VirtualKeyBoard(Screen):
 				"RIGHT": self.key_right
 			}
 
-		self["country"] = StaticText("")
+		self["key_red"] = StaticText(_("Exit"))
+		self["key_green"] = StaticText(_("Save"))
+		self["key_yellow"] = self["country"] = StaticText("")
+		self["key_blue"] = StaticText(_("Upper case"))
 		self["header"] = Label()
 		self["text"] = Input(currPos=len(kwargs.get("text", "").decode("utf-8",'ignore')), allMarked=False, **kwargs)
 		self["list"] = VirtualKeyBoardList([])
@@ -109,7 +112,7 @@ class VirtualKeyBoard(Screen):
 		self.onExecBegin.append(self.setKeyboardModeAscii)
 		self.onLayoutFinish.append(self.buildVirtualKeyBoard)
 		self.onClose.append(self.__onClose)
-
+	
 	def __onClose(self):
 		self.sms.timer.stop()
 
@@ -260,6 +263,32 @@ class VirtualKeyBoard(Screen):
 				[u"A", u"S", u"D", u"F", u"G", u"H", u"J", u"K", u"L", u"?", u'"', u"|"],
 				[u">", u"Z", u"X", u"C", u"V", u"B", u"N", u"M", u";", u":", u"_", u"CLEAR"],
 				[u"SHIFT", u"SPACE", u"Ą", u"Ć", u"Ę", u"Ł", u"Ń", u"Ó", u"Ś", u"Ź", u"Ż", u"OK"]]
+			self.nextLang = 'th_TH'
+		elif self.lang == 'th_TH':
+			self.keys_list = [[u"EXIT", "\xe0\xb9\x85", "\xe0\xb8\xa0", "\xe0\xb8\x96", "\xe0\xb8\xb8", "\xe0\xb8\xb6", "\xe0\xb8\x84", "\xe0\xb8\x95", "\xe0\xb8\x88", "\xe0\xb8\x82", "\xe0\xb8\x8a", u"BACKSPACE"],
+				["\xe0\xb9\x86", "\xe0\xb9\x84", "\xe0\xb8\xb3", "\xe0\xb8\x9e", "\xe0\xb8\xb0", "\xe0\xb8\xb1", "\xe0\xb8\xb5", "\xe0\xb8\xa3", "\xe0\xb8\x99", "\xe0\xb8\xa2", "\xe0\xb8\x9a", "\xe0\xb8\xa5"],
+				["\xe0\xb8\x9f", "\xe0\xb8\xab", "\xe0\xb8\x81", "\xe0\xb8\x94", "\xe0\xb9\x80", "\xe0\xb9\x89", "\xe0\xb9\x88", "\xe0\xb8\xb2", "\xe0\xb8\xaa", "\xe0\xb8\xa7", "\xe0\xb8\x87", "\xe0\xb8\x83"],
+				["\xe0\xb8\x9c", "\xe0\xb8\x9b", "\xe0\xb9\x81", "\xe0\xb8\xad", "\xe0\xb8\xb4", "\xe0\xb8\xb7", "\xe0\xb8\x97", "\xe0\xb8\xa1", "\xe0\xb9\x83", "\xe0\xb8\x9d", "", u"ALL"],
+				[u"SHIFT", u"SPACE", u"OK", u"LEFT", u"RIGHT"]]
+			self.shiftkeys_list = [[u"EXIT", "\xe0\xb9\x91", "\xe0\xb9\x92", "\xe0\xb9\x93", "\xe0\xb9\x94", "\xe0\xb8\xb9", "\xe0\xb9\x95", "\xe0\xb9\x96", "\xe0\xb9\x97", "\xe0\xb9\x98", "\xe0\xb9\x99", u"BACKSPACE"],
+				["\xe0\xb9\x90", "", "\xe0\xb8\x8e", "\xe0\xb8\x91", "\xe0\xb8\x98", "\xe0\xb9\x8d", "\xe0\xb9\x8a", "\xe0\xb8\x93", "\xe0\xb8\xaf", "\xe0\xb8\x8d", "\xe0\xb8\x90", "\xe0\xb8\x85"],
+				["\xe0\xb8\xa4", "\xe0\xb8\x86", "\xe0\xb8\x8f", "\xe0\xb9\x82", "\xe0\xb8\x8c", "\xe0\xb9\x87", "\xe0\xb9\x8b", "\xe0\xb8\xa9", "\xe0\xb8\xa8", "\xe0\xb8\x8b", "", "\xe0\xb8\xbf"],
+				["", "", "\xe0\xb8\x89", "\xe0\xb8\xae", "\xe0\xb8\xba", "\xe0\xb9\x8c", "", "\xe0\xb8\x92", "\xe0\xb8\xac", "\xe0\xb8\xa6", "", u"CLEAR"],
+				[u"SHIFT", u"SPACE", u"OK", u"LEFT", u"RIGHT"]]
+			self.nextLang = 'uk_UA'
+		elif self.lang == 'uk_UA':
+			self.keys_list = [
+				[u"EXIT", u"1", u"2", u"3", u"4", u"5", u"6", u"7", u"8", u"9", u"0", u"BACKSPACE"],
+				[u"а", u"б", u"в", u"г", u"ґ", u"д", u"е", u"є", u"ж", u"з", u"и", u"+"],
+				[u"і", u"ї", u"й", u"к", u"л", u"м", u"н", u"о", u"п", u"р", u"с", u"#"],
+				[u"<", u"т", u"у", u"ф", u"х", u"ц", u"ч", u"ш", u",", u".", u"-", u"ALL"],
+				[u"SHIFT", u"SPACE", u"@", u"щ", u"ь", u"ю", u"я", u"OK", u"LEFT", u"RIGHT"]]
+			self.shiftkeys_list = [
+				[u"EXIT", u"!", u'"', u"§", u"$", u"%", u"&", u"/", u"(", u")", u"=", u"BACKSPACE"],
+				[u"А", u"Б", u"В", u"Г", u"Ґ", u"Д", u"Е", u"Є", u"Ж", u"З", u"И", u"*"],
+				[u"І", u"Ї", u"Й", u"К", u"Л", u"М", u"Н", u"О", u"П", u"Р", u"С", u"'"],
+				[u">", u"Т", u"У", u"Ф", u"Х", u"Ц", u"Ч", u"Ш", u";", u":", u"_", u"CLEAR"],
+				[u"SHIFT", u"SPACE", u"?", u"\\", u"Щ", u"Ь", u"Ю", u"Я", u"OK", u"LEFT", u"RIGHT"]]
 			self.nextLang = 'en_EN'
 		else:
 			self.keys_list = [
@@ -325,6 +354,7 @@ class VirtualKeyBoard(Screen):
 		self.smsChar = None
 		self.shiftMode = not self.shiftMode
 		self.buildVirtualKeyBoard()
+		self["key_blue"].setText(self.shiftMode and _("Lower case") or _("Upper case"))
 
 	def okClicked(self):
 		self.smsChar = None
@@ -409,7 +439,7 @@ class VirtualKeyBoard(Screen):
 
 	def smsOK(self):
 		if self.smsChar and self.selectAsciiKey(self.smsChar):
-			print "pressing ok now"
+			print "[VirtualKeyboard] pressing ok now"
 			self.okClicked()
 
 	def keyGotAscii(self):

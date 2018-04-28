@@ -1,4 +1,4 @@
-from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersCable, eDVBFrontendParametersTerrestrial
+from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersCable, eDVBFrontendParametersTerrestrial, eDVBFrontendParametersATSC
 from Components.NimManager import nimmanager
 
 def orbpos(pos):
@@ -13,7 +13,7 @@ def getTunerDescription(nim):
 
 def getMHz(frequency):
 	if str(frequency).endswith('MHz'):
-		return frequency.split()[0]
+		return float(frequency.split()[0])
 	return (frequency+50000)/100000/10.
 
 def getChannelNumber(frequency, nim):
@@ -22,7 +22,7 @@ def getChannelNumber(frequency, nim):
 			if n.isCompatible("DVB-T"):
 				nim = n.slot
 				break
-	f = int(getMHz(frequency))
+	f = getMHz(frequency)
 	descr = getTunerDescription(nim)
 	if "DVB-T" in descr:
 		if "Europe" in descr:
@@ -86,7 +86,9 @@ def ConvertToHumanReadable(tp, tunertype = None):
 			eDVBFrontendParametersSatellite.Modulation_Auto : _("Auto"),
 			eDVBFrontendParametersSatellite.Modulation_QPSK : "QPSK",
 			eDVBFrontendParametersSatellite.Modulation_QAM16 : "QAM16",
-			eDVBFrontendParametersSatellite.Modulation_8PSK : "8PSK"}.get(tp.get("modulation"))
+			eDVBFrontendParametersSatellite.Modulation_8PSK : "8PSK",
+			eDVBFrontendParametersSatellite.Modulation_16APSK : "16APSK",
+			eDVBFrontendParametersSatellite.Modulation_32APSK : "32APSK"}.get(tp.get("modulation"))
 		ret["orbital_position"] = nimmanager.getSatName(int(tp.get("orbital_position")))
 		ret["orb_pos"] = orbpos(int(tp.get("orbital_position")))
 		ret["polarization"] = {
@@ -114,6 +116,11 @@ def ConvertToHumanReadable(tp, tunertype = None):
 				eDVBFrontendParametersSatellite.Pilot_Off : _("Off")}.get(tp.get("pilot"))
 		ret["frequency"] = (tp.get("frequency") and str(tp.get("frequency")/1000) + ' MHz') or '0 MHz'
 		ret["symbol_rate"] = (tp.get("symbol_rate") and tp.get("symbol_rate")/1000) or 0
+		ret["pls_mode"] = {
+			eDVBFrontendParametersSatellite.PLS_Root : _("Root"),
+			eDVBFrontendParametersSatellite.PLS_Gold : _("Gold"),
+			eDVBFrontendParametersSatellite.PLS_Combo : _("Combo"),
+			eDVBFrontendParametersSatellite.PLS_Unknown : _("Unknown")}.get(tp.get("pls_mode"))
 	elif tunertype == "DVB-C":
 		ret["tuner_type"] = _("Cable")
 		ret["modulation"] = {
@@ -142,17 +149,16 @@ def ConvertToHumanReadable(tp, tunertype = None):
 		ret["system"] = {
 			eDVBFrontendParametersCable.System_DVB_C_ANNEX_A : "DVB-C",
 			eDVBFrontendParametersCable.System_DVB_C_ANNEX_C : "DVB-C ANNEX C"}.get(tp.get("system"))
-		ret["frequency"] = (tp.get("frequency") and str(tp.get("frequency")/1000) + ' MHz') or '0 MHz'
+		ret["frequency"] = (tp.get("frequency") and ('%s MHz' % str(tp.get("frequency")/1000.))) or '0 MHz'
+		ret["symbol_rate"] = (tp.get("symbol_rate") and tp.get("symbol_rate")/1000) or 0
 	elif tunertype == "DVB-T":
 		ret["tuner_type"] = _("Terrestrial")
-		ret["bandwidth"] = {
-			0 : _("Auto"),
-			10000000 : "10 MHz",
-			8000000 : "8 MHz",
-			7000000 : "7 MHz",
-			6000000 : "6 MHz",
-			5000000 : "5 MHz",
-			1712000 : "1.712 MHz"}.get(tp.get("bandwidth"))
+		x = tp.get("bandwidth")
+		if isinstance(x, int):
+			x = str("%.3f" % (float(x) / 1000000.0)).rstrip('0').rstrip('.') + " MHz" if x else "Auto"
+		else:
+			x = ""
+		ret["bandwidth"] = x
 		#print 'bandwidth:',tp.get("bandwidth")
 		ret["code_rate_lp"] = {
 			eDVBFrontendParametersTerrestrial.FEC_Auto : _("Auto"),
@@ -217,7 +223,7 @@ def ConvertToHumanReadable(tp, tunertype = None):
 			eDVBFrontendParametersTerrestrial.System_DVB_T : "DVB-T",
 			eDVBFrontendParametersTerrestrial.System_DVB_T2 : "DVB-T2"}.get(tp.get("system"))
 #		print 'system:',tp.get("system")
-		ret["frequency"] = (tp.get("frequency") and ('%i MHz' % int(round(tp.get("frequency"), -6)/1000000))) or '0 MHz'
+		ret["frequency"] = (tp.get("frequency") and ('%s MHz' % str(tp.get("frequency")/1000000.))) or '0 MHz'
 #		print 'frequency:',tp.get("frequency")
 		ret["channel"] = _("CH%s") % getChannelNumber(tp.get("frequency"), "DVB-T")
 	elif tunertype == "ATSC":
@@ -229,8 +235,8 @@ def ConvertToHumanReadable(tp, tunertype = None):
 			eDVBFrontendParametersATSC.Modulation_QAM64 : "QAM64",
 			eDVBFrontendParametersATSC.Modulation_QAM128 : "QAM128",
 			eDVBFrontendParametersATSC.Modulation_QAM256 : "QAM256",
-			eDVBFrontendParametersATSC.Modulation_VSB_8 : "VSB_8",
-			eDVBFrontendParametersATSC.Modulation_VSB_16 : "VSB_16"}.get(tp.get("modulation"))
+			eDVBFrontendParametersATSC.Modulation_VSB_8 : "8VSB",
+			eDVBFrontendParametersATSC.Modulation_VSB_16 : "16VSB"}.get(tp.get("modulation"))
 		ret["inversion"] = {
 			eDVBFrontendParametersATSC.Inversion_Unknown : _("Auto"),
 			eDVBFrontendParametersATSC.Inversion_On : _("On"),

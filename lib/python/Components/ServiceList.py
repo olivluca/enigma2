@@ -1,4 +1,3 @@
-from HTMLComponent import HTMLComponent
 from GUIComponent import GUIComponent
 from skin import parseColor, parseFont
 
@@ -19,7 +18,7 @@ def refreshServiceList(configElement = None):
 		if servicelist:
 			servicelist.setMode()
 
-class ServiceList(HTMLComponent, GUIComponent):
+class ServiceList(GUIComponent):
 	MODE_NORMAL = 0
 	MODE_FAVOURITES = 1
 
@@ -175,7 +174,7 @@ class ServiceList(HTMLComponent, GUIComponent):
 			return None
 		from Components.ServiceEventTracker import InfoBarCount
 		if adjust and config.usage.multibouquet.value and InfoBarCount == 1 and ref and ref.type != 8192:
-			print "[servicelist] search for service in userbouquets"
+			print "[ServiceList] search for service in userbouquets"
 			if self.serviceList:
 				revert_mode = config.servicelist.lastmode.value
 				revert_root = self.getRoot()
@@ -199,7 +198,7 @@ class ServiceList(HTMLComponent, GUIComponent):
 						self.serviceList.saveChannel(ref)
 						return True
 				self.serviceList.enterUserbouquet(revert_radio_root)
-				print "[servicelist] service not found in any userbouquets"
+				print "[ServiceList] service not found in any userbouquets"
 				if revert_mode == "tv":
 					self.serviceList.setModeTv()
 				elif revert_mode == "radio":
@@ -236,7 +235,7 @@ class ServiceList(HTMLComponent, GUIComponent):
 
 	def moveToChar(self, char):
 		# TODO fill with life
-		print "Next char: "
+		print "[ServiceList] Next char: "
 		index = self.l.getNextBeginningWithChar(char)
 		indexup = self.l.getNextBeginningWithChar(char.upper())
 		if indexup != 0:
@@ -244,7 +243,7 @@ class ServiceList(HTMLComponent, GUIComponent):
 				index = indexup
 
 		self.instance.moveSelectionTo(index)
-		print "Moving to character " + str(char)
+		print "[ServiceList] Moving to character " + str(char)
 
 	def moveToNextMarker(self):
 		idx = self.l.getNextMarkerPos()
@@ -404,3 +403,7 @@ class ServiceList(HTMLComponent, GUIComponent):
 		self.l.setCryptoIconMode(int(config.usage.crypto_icon_mode.value))
 		self.l.setRecordIndicatorMode(int(config.usage.record_indicator_mode.value))
 		self.l.setColumnWidth(int(config.usage.servicelist_column.value))
+
+	def selectionEnabled(self, enabled):
+		if self.instance is not None:
+			self.instance.setSelectionEnable(enabled)

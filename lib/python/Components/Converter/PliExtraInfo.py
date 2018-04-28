@@ -9,6 +9,23 @@ from Tools.Transponder import ConvertToHumanReadable, getChannelNumber
 from Tools.GetEcmInfo import GetEcmInfo
 from Poll import Poll
 
+caid_data = (
+	( "0x100",  "0x1ff", "Seca",     "S",  True  ),
+	( "0x500",  "0x5ff", "Via",      "V",  True  ),
+	( "0x600",  "0x6ff", "Irdeto",   "I",  True  ),
+	( "0x900",  "0x9ff", "NDS",      "Nd", True  ),
+	( "0xb00",  "0xbff", "Conax",    "Co", True  ),
+	( "0xd00",  "0xdff", "CryptoW",  "Cw", True  ),
+	( "0xe00",  "0xeff", "PowerVU",  "P",  False ),
+	("0x1000", "0x10FF", "Tandberg", "TB", False ),
+	("0x1700", "0x17ff", "Beta",     "B",  True  ),
+	("0x1800", "0x18ff", "Nagra",    "N",  True  ),
+	("0x2600", "0x2600", "Biss",     "Bi", False ),
+	("0x4ae0", "0x4ae1", "Dre",      "D",  False ),
+	("0x4aee", "0x4aee", "BulCrypt", "B1", False ),
+	("0x5581", "0x5581", "BulCrypt", "B2", False )
+)
+
 def addspace(text):
 	if text:
 		text += "  "
@@ -21,21 +38,6 @@ class PliExtraInfo(Poll, Converter, object):
 		self.type = type
 		self.poll_interval = 1000
 		self.poll_enabled = True
-		self.caid_data = (
-			( "0x100",  "0x1ff", "Seca",     "S",  True  ),
-			( "0x500",  "0x5ff", "Via",      "V",  True  ),
-			( "0x600",  "0x6ff", "Irdeto",   "I",  True  ),
-			( "0x900",  "0x9ff", "NDS",      "Nd", True  ),
-			( "0xb00",  "0xbff", "Conax",    "Co", True  ),
-			( "0xd00",  "0xdff", "CryptoW",  "Cw", True  ),
-			( "0xe00",  "0xeff", "PowerVU",  "P",  False ),
-			("0x1700", "0x17ff", "Beta",     "B",  True  ),
-			("0x1800", "0x18ff", "Nagra",    "N",  True  ),
-			("0x2600", "0x2600", "Biss",     "Bi", False ),
-			("0x4ae0", "0x4ae1", "Dre",      "D",  False ),
-			("0x4aee", "0x4aee", "BulCrypt", "B1", False ),
-			("0x5581", "0x5581", "BulCrypt", "B2", False )
-		)
 		self.ca_table = (
 			("CryptoCaidSecaAvailable",	"S",	False),
 			("CryptoCaidViaAvailable",	"V",	False),
@@ -50,6 +52,7 @@ class PliExtraInfo(Poll, Converter, object):
 			("CryptoCaidDreAvailable",	"D",	False),
 			("CryptoCaidBulCrypt1Available","B1",	False),
 			("CryptoCaidBulCrypt2Available","B2",	False),
+			("CryptoCaidTandbergAvailable",	"T",	False),
 			("CryptoCaidSecaSelected",	"S",	True),
 			("CryptoCaidViaSelected",	"V",	True),
 			("CryptoCaidIrdetoSelected",	"I",	True),
@@ -63,6 +66,7 @@ class PliExtraInfo(Poll, Converter, object):
 			("CryptoCaidDreSelected",	"D",	True),
 			("CryptoCaidBulCrypt1Selected",	"B1",	True),
 			("CryptoCaidBulCrypt2Selected",	"B2",	True),
+			("CryptoCaidTandbergSelected",	"T",	True)
 		)
 		self.ecmdata = GetEcmInfo()
 		self.feraw = self.fedata = self.updateFEdata = None
@@ -84,7 +88,7 @@ class PliExtraInfo(Poll, Converter, object):
 		res = ""
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
 
-		for caid_entry in self.caid_data:
+		for caid_entry in caid_data:
 			if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
 				color="\c0000??00"
 			else:
@@ -214,6 +218,22 @@ class PliExtraInfo(Poll, Converter, object):
 		res = color + 'P'
 		res += "\c00??????"
 		return res
+		
+	def createCryptoTandberg(self, info):
+		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
+		if int('0x1010', 16) <= int(self.current_caid, 16) <= int('0x1010', 16):
+			color="\c004c7d3f"
+		else:
+			color = "\c009?9?9?"
+			try:
+				for caid in available_caids:
+					if int('0x1010', 16) <= caid <= int('0x1010', 16):
+						color="\c00eeee00"
+			except:
+				pass
+		res = color + 'T'
+		res += "\c00??????"
+		return res		
 
 	def createCryptoBeta(self, info):
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
@@ -282,11 +302,25 @@ class PliExtraInfo(Poll, Converter, object):
 	def createCryptoSpecial(self, info):
 		caid_name = "FTA"
 		try:
-			for caid_entry in self.caid_data:
+			for caid_entry in caid_data:
 				if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
 					caid_name = caid_entry[2]
 					break
 			return caid_name + ":%04x:%04x:%04x" % (int(self.current_caid,16), int(self.current_provid,16), info.getInfo(iServiceInformation.sSID))
+		except:
+			pass
+		return ""
+
+	def createCryptoNameCaid(self, info):
+		caid_name = "FTA"
+		if int(self.current_caid,16) == 0:
+			return caid_name
+		try:
+			for caid_entry in self.caid_data:
+				if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
+					caid_name = caid_entry[2]
+					break
+			return caid_name + ":%04x" % (int(self.current_caid,16))
 		except:
 			pass
 		return ""
@@ -329,7 +363,10 @@ class PliExtraInfo(Poll, Converter, object):
 		return str(video_width) + "x" + str(video_height) + video_pol + fps
 
 	def createVideoCodec(self, info):
-		return ("MPEG2", "MPEG4", "MPEG1", "MPEG4-II", "VC1", "VC1-SM", "")[info.getInfo(iServiceInformation.sVideoType)]
+		return ("MPEG2", "AVC", "MPEG1", "MPEG4-VC", "VC1", "VC1-SM", "HEVC", "")[info.getInfo(iServiceInformation.sVideoType)]
+
+	def createServiceRef(self, info):
+		return info.getInfoString(iServiceInformation.sServiceref)
 
 	def createPIDInfo(self, info):
 		vpid = info.getInfo(iServiceInformation.sVideoPID)
@@ -626,11 +663,25 @@ class PliExtraInfo(Poll, Converter, object):
 				return self.createCryptoDre(info)
 			else:
 				return ""
+				
+		if self.type == "CryptoTandberg":
+			if int(config.usage.show_cryptoinfo.value) > 0:
+				self.getCryptoInfo(info)
+				return self.createCryptoTandberg(info)
+			else:
+				return ""				
 
 		if self.type == "CryptoSpecial":
 			if int(config.usage.show_cryptoinfo.value) > 0:
 				self.getCryptoInfo(info)
 				return self.createCryptoSpecial(info)
+			else:
+				return ""
+
+		if self.type == "CryptoNameCaid":
+			if int(config.usage.show_cryptoinfo.value) > 0:
+				self.getCryptoInfo(info)
+				return self.createCryptoNameCaid(info)
 			else:
 				return ""
 
@@ -678,6 +729,9 @@ class PliExtraInfo(Poll, Converter, object):
 
 		if self.type == "PIDInfo":
 			return self.createPIDInfo(info)
+
+		if self.type == "ServiceRef":
+			return self.createServiceRef(info)
 
 		if not feraw:
 			return ""
@@ -749,7 +803,7 @@ class PliExtraInfo(Poll, Converter, object):
 
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
 
-		for caid_entry in self.caid_data:
+		for caid_entry in caid_data:
 			if caid_entry[3] == request_caid:
 				if request_selected:
 					if int(caid_entry[0], 16) <= int(current_caid, 16) <= int(caid_entry[1], 16):

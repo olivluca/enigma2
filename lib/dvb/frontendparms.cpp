@@ -158,6 +158,21 @@ int eDVBTransponderData::getSystem() const
 	return -1;
 }
 
+int eDVBTransponderData::getIsId() const
+{
+	return -1;
+}
+
+int eDVBTransponderData::getPLSMode() const
+{
+	return -1;
+}
+
+int eDVBTransponderData::getPLSCode() const
+{
+	return -1;
+}
+
 int eDVBTransponderData::getBandwidth() const
 {
 	return -1;
@@ -273,6 +288,8 @@ int eDVBSatelliteTransponderData::getModulation() const
 	default: eDebug("[eDVBSatelliteTransponderData] got unsupported modulation from frontend! report as QPSK!");
 	case QPSK: return eDVBFrontendParametersSatellite::Modulation_QPSK;
 	case PSK_8: return eDVBFrontendParametersSatellite::Modulation_8PSK;
+	case APSK_16: return eDVBFrontendParametersSatellite::Modulation_16APSK;
+	case APSK_32: return eDVBFrontendParametersSatellite::Modulation_32APSK;
 	}
 }
 
@@ -318,6 +335,33 @@ int eDVBSatelliteTransponderData::getSystem() const
 	case SYS_DVBS: return eDVBFrontendParametersSatellite::System_DVB_S;
 	case SYS_DVBS2: return eDVBFrontendParametersSatellite::System_DVB_S2;
 	}
+}
+
+int eDVBSatelliteTransponderData::getIsId() const
+{
+	if (originalValues) return transponderParameters.is_id;
+
+	unsigned int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.is_id;
+	return stream_id & 0xFF;
+}
+
+int eDVBSatelliteTransponderData::getPLSMode() const
+{
+	if (originalValues) return transponderParameters.pls_mode;
+
+	unsigned int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.pls_mode;
+	return (stream_id >> 26) & 0x3;
+}
+
+int eDVBSatelliteTransponderData::getPLSCode() const
+{
+	if (originalValues) return transponderParameters.pls_code;
+
+	unsigned int stream_id = getProperty(DTV_STREAM_ID);
+	if (stream_id == NO_STREAM_ID_FILTER) return transponderParameters.pls_code;
+	return (stream_id >> 8) & 0x3FFFF;
 }
 
 DEFINE_REF(eDVBCableTransponderData);
@@ -553,7 +597,7 @@ int eDVBTerrestrialTransponderData::getHierarchyInformation() const
 
 int eDVBTerrestrialTransponderData::getPlpId() const
 {
-	if (originalValues) return transponderParameters.plpid;
+	if (originalValues) return transponderParameters.plp_id;
 
 #if defined DTV_STREAM_ID
 	return getProperty(DTV_STREAM_ID);

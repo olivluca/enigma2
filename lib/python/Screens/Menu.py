@@ -10,17 +10,19 @@ from Components.SystemInfo import SystemInfo
 
 from Tools.BoundFunction import boundFunction
 from Tools.Directories import resolveFilename, SCOPE_SKIN
+from enigma import eTimer
 
 import xml.etree.cElementTree
 
 from Screens.Setup import Setup, getSetupTitle
 
-mainmenu = _("Main menu")
-
 # read the menu
 file = open(resolveFilename(SCOPE_SKIN, 'menu.xml'), 'r')
 mdom = xml.etree.cElementTree.parse(file)
 file.close()
+
+menu_path = ""
+full_menu_path = ""
 
 class MenuUpdater:
 	def __init__(self):
@@ -35,7 +37,7 @@ class MenuUpdater:
 		self.updatedMenuItems[id].remove([text, pos, module, screen, weight])
 
 	def updatedMenuAvailable(self, id):
-		return self.updatedMenuItems.has_key(id)
+		return id in self.updatedMenuItems
 
 	def getUpdatedMenu(self, id):
 		return self.updatedMenuItems[id]
@@ -49,7 +51,9 @@ class Menu(Screen, ProtectedScreen):
 	ALLOW_SUSPEND = True
 
 	def okbuttonClick(self):
-		# print "okbuttonClick"
+		if self.number:
+			self["menu"].setIndex(self.number - 1)
+		self.resetNumberKey()
 		selection = self["menu"].getCurrent()
 		if selection is not None:
 			selection[1]()
@@ -66,17 +70,16 @@ class Menu(Screen, ProtectedScreen):
 		# FIXME. somehow
 		if arg[0] != "":
 			exec "from " + arg[0] + " import *"
-
 		self.openDialog(*eval(arg[1]))
 
 	def nothing(self): #dummy
 		pass
 
-	def openDialog(self, *dialog):				# in every layer needed
+	def openDialog(self, *dialog): # in every layer needed
 		self.session.openWithCallback(self.menuClosed, *dialog)
 
 	def openSetup(self, dialog):
-		self.session.openWithCallback(self.menuClosed, Setup, dialog)
+		self.session.openWithCallback(self.menuClosed, Setup, dialog, None, full_menu_path)
 
 	def addMenu(self, destList, node):
 		requires = node.get("requires")
@@ -98,6 +101,10 @@ class Menu(Screen, ProtectedScreen):
 		destList.append((MenuTitle, a, entryID, weight))
 
 	def menuClosedWithConfigFlush(self, *res):
+		global menu_path
+		menu_path = ""
+		global full_menu_path
+		full_menu_path = ""
 		configfile.save()
 		self.menuClosed(*res)
 
@@ -121,9 +128,10 @@ class Menu(Screen, ProtectedScreen):
 		weight = node.get("weight", 50)
 		for x in node:
 			if x.tag == 'screen':
+				args = 'full_menu_path'
 				module = x.get("module")
 				screen = x.get("screen")
-
+				
 				if screen is None:
 					screen = module
 
@@ -132,12 +140,11 @@ class Menu(Screen, ProtectedScreen):
 					module = "Screens." + module
 				else:
 					module = ""
-
 				# check for arguments. they will be appended to the
 				# openDialog call
-				args = x.text or ""
+				if x.text:
+					args = x.text or ""
 				screen += ", " + args
-
 				destList.append((_(item_text or "??"), boundFunction(self.runScreen, (module, screen)), entryID, weight))
 				return
 			elif x.tag == 'plugin':
@@ -186,7 +193,7 @@ class Menu(Screen, ProtectedScreen):
 		list = []
 
 		menuID = None
-		for x in parent:						#walk through the actual nodelist
+		for x in parent: #walk through the actual nodelist
 			if not x.tag:
 				continue
 			if x.tag == 'item':
@@ -237,6 +244,9 @@ class Menu(Screen, ProtectedScreen):
 		else:
 			list.sort(key=lambda x: int(x[3]))
 
+		if config.usage.menu_show_numbers.value:
+			list = [(str(x[0] + 1) + "  " +x[1][0], x[1][1], x[1][2]) for x in enumerate(list)]
+
 		self["menu"] = List(list)
 
 		self["actions"] = NumberActionMap(["OkCancelActions", "MenuActions", "NumberActions"],
@@ -244,6 +254,7 @@ class Menu(Screen, ProtectedScreen):
 				"ok": self.okbuttonClick,
 				"cancel": self.closeNonRecursive,
 				"menu": self.closeRecursive,
+				"0": self.keyNumberGlobal,
 				"1": self.keyNumberGlobal,
 				"2": self.keyNumberGlobal,
 				"3": self.keyNumberGlobal,
@@ -256,26 +267,61 @@ class Menu(Screen, ProtectedScreen):
 			})
 
 		a = parent.get("title", "").encode("UTF-8") or None
-		a = a and _(a)
-		if a is None:
-			a = _(parent.get("text", "").encode("UTF-8"))
-		self["title"] = StaticText(a)
-		Screen.setTitle(self, a)
+		a = a and _(a) or _(parent.get("text", "").encode("UTF-8"))
 		self.menu_title = a
+		global menu_path
+		self.menu_path_compressed = menu_path
+		if menu_path == "":
+			menu_path += a
+		elif not menu_path.endswith(a):
+			menu_path += " / " + a
+		global full_menu_path
+		full_menu_path = menu_path + ' / '
+		if config.usage.show_menupath.value == 'large':
+			Screen.setTitle(self, menu_path)
+			self["title"] = StaticText(menu_path)
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			Screen.setTitle(self, a)
+			self["title"] = StaticText(a)
+			self["menu_path_compressed"] = StaticText(self.menu_path_compressed and self.menu_path_compressed + " >" or "")
+		else:
+			Screen.setTitle(self, a)
+			self["title"] = StaticText(a)
+			self["menu_path_compressed"] = StaticText("")
+
+		self.number = 0
+		self.nextNumberTimer = eTimer()
+		self.nextNumberTimer.callback.append(self.okbuttonClick)
 
 	def keyNumberGlobal(self, number):
-		# print "menu keyNumber:", number
-		# Calculate index
-		number -= 1
+		self.number = self.number * 10 + number
+		if self.number and self.number <= len(self["menu"].list):
+			if number * 10 > len(self["menu"].list) or self.number >= 10:
+				self.okbuttonClick()
+			else:
+				self.nextNumberTimer.start(1500, True)
+		else:
+			self.resetNumberKey()
 
-		if len(self["menu"].list) > number:
-			self["menu"].setIndex(number)
-			self.okbuttonClick()
+	def resetNumberKey(self):
+		self.nextNumberTimer.stop()
+		self.number = 0
 
 	def closeNonRecursive(self):
+		global menu_path
+		menu_path = self.menu_path_compressed
+		global full_menu_path
+		full_menu_path = menu_path + ' / '
+		self.resetNumberKey()
 		self.close(False)
 
 	def closeRecursive(self):
+		global menu_path
+		menu_path = ""
+		global full_menu_path
+		full_menu_path = ""
+		self.resetNumberKey()
 		self.close(True)
 
 	def createSummary(self):

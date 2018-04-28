@@ -53,7 +53,7 @@ eFbLCD::eFbLCD(const char *fb)
 
 	m_available = fix.smem_len;
 	m_phys_mem = fix.smem_start;
-	eDebug("[eFbLCD] %dk video mem", m_available / 1024);
+	eDebug("[eFbLCD] %s %dk video mem", fb, m_available / 1024);
 	_buffer=(unsigned char*)mmap(0, m_available, PROT_WRITE|PROT_READ, MAP_SHARED, lcdfd, 0);
 	if (!_buffer)
 	{
@@ -74,7 +74,7 @@ nolfb:
 		::close(lcdfd);
 		lcdfd = -1;
 	}
-	eDebug("[eFbLCD] framebuffer not available");
+	eDebug("[eFbLCD] framebuffer %s not available", fb);
 	return;
 }
 
@@ -144,7 +144,8 @@ int eFbLCD::setMode(int nxRes, int nyRes, int nbpp)
 
 	ioctl(lcdfd, FBIOGET_VSCREENINFO, &m_screeninfo);
 
-	if ((m_screeninfo.xres != nxRes) && (m_screeninfo.yres != nyRes) && (m_screeninfo.bits_per_pixel != nbpp))
+	if ((m_screeninfo.xres != (unsigned int)nxRes) || (m_screeninfo.yres != (unsigned int)nyRes) ||
+		(m_screeninfo.bits_per_pixel != (unsigned int)nbpp))
 	{
 		eDebug("[eFbLCD] SetMode failed: wanted: %dx%dx%d, got %dx%dx%d",
 			nxRes, nyRes, nbpp,

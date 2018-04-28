@@ -5,6 +5,9 @@ from sys import maxint
 from enigma import eHdmiCEC, eActionMap
 from enigma import eTimer
 
+# sys.maxint on 64bit (2**63-1) fails with OverflowError on eActionMap.bindAction use 32bit value (2**31-1)
+maxint = 2147483647
+
 from config import config, ConfigSelection, ConfigYesNo, ConfigSubsection, ConfigText
 from Tools.StbHardware import getFPWasTimerWakeup
 
@@ -33,9 +36,11 @@ config.hdmicec.control_receiver_wakeup = ConfigYesNo(default = False)
 config.hdmicec.control_receiver_standby = ConfigYesNo(default = False)
 config.hdmicec.handle_deepstandby_events = ConfigYesNo(default = False)
 choicelist = []
-for i in (10, 50, 100, 150, 250):
-	choicelist.append(("%d" % i, "%d ms" % i))
+for i in (10, 50, 100, 150, 250, 500, 750, 1000):
+	choicelist.append(("%d" % i, _("%d ms") % i))
 config.hdmicec.minimum_send_interval = ConfigSelection(default = "0", choices = [("0", _("Disabled"))] + choicelist)
+
+config.hdmicec.sourceactive_zaptimers = ConfigYesNo(default=False)
 
 class HdmiCec:
 

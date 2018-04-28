@@ -12,7 +12,7 @@ from enigma import eEnv, ePicLoad
 import os
 
 class SkinSelectorBase:
-	def __init__(self, session, args = None):
+	def __init__(self, session):
 		self.skinlist = []
 		self.previewPath = ""
 		if self.SKINXML and os.path.exists(os.path.join(self.root, self.SKINXML)):
@@ -58,7 +58,7 @@ class SkinSelectorBase:
 			self["Preview"].show()
 
 	def layoutFinished(self):
-		self.picload.setPara((self["Preview"].instance.size().width(), self["Preview"].instance.size().height(), 0, 0, 1, 1, "#00000000"))
+		self.picload.setPara((self["Preview"].instance.size().width(), self["Preview"].instance.size().height(), 1.0, 1, 1, 1, "#ff000000"))
 		tmp = self.config.value.find("/"+self.SKINXML)
 		if tmp != -1:
 			tmp = self.config.value[:tmp]
@@ -72,6 +72,8 @@ class SkinSelectorBase:
 		self.loadPreview()
 
 	def ok(self):
+		if not self["SkinList"].getCurrent() or not self.SKINXML:
+			return
 		if self["SkinList"].getCurrent() == self.DEFAULTSKIN:
 			self.skinfile = ""
 			self.skinfile = os.path.join(self.skinfile, self.SKINXML)
@@ -82,7 +84,7 @@ class SkinSelectorBase:
 			self.skinfile = self["SkinList"].getCurrent()
 			self.skinfile = os.path.join(self.skinfile, self.SKINXML)
 
-		print "Skinselector: Selected Skin: "+self.root+self.skinfile
+		print "[SkinSelector] Selected Skin: "+self.root+self.skinfile
 		restartbox = self.session.openWithCallback(self.restartGUI,MessageBox,_("GUI needs a restart to apply a new skin\nDo you want to restart the GUI now?"), MessageBox.TYPE_YESNO)
 		restartbox.setTitle(_("Restart GUI now?"))
 
@@ -115,6 +117,8 @@ class SkinSelectorBase:
 			pngpath = os.path.join(os.path.join(self.root, pngpath), "piconprev.png")
 		else:
 			pngpath = self["SkinList"].getCurrent()
+			if not pngpath :
+				pngpath = "."
 			pngpath = os.path.join(os.path.join(self.root, pngpath), "prev.png")
 
 		if not os.path.exists(pngpath):
@@ -144,11 +148,25 @@ class SkinSelector(Screen, SkinSelectorBase):
 	skinlist = []
 	root = os.path.join(eEnv.resolve("${datadir}"),"enigma2")
 
-	def __init__(self, session, args = None):
+	def __init__(self, session, menu_path="", skin_name=None):
 		Screen.__init__(self, session)
-		SkinSelectorBase.__init__(self, args)
-		Screen.setTitle(self, _("Skin setup"))
-		self.skinName = "SkinSelector"
+		SkinSelectorBase.__init__(self, session)
+		self.skinName = ["SkinSelector"]
+		if isinstance(skin_name, str):
+			self.skinName.insert(0,skin_name)
+
+		screentitle = _("Skin")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.config = config.skin.primary_skin
 
 class LcdSkinSelector(Screen, SkinSelectorBase):
@@ -160,9 +178,20 @@ class LcdSkinSelector(Screen, SkinSelectorBase):
 	skinlist = []
 	root = os.path.join(eEnv.resolve("${datadir}"),"enigma2/display/")
 
-	def __init__(self, session, args = None):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
-		SkinSelectorBase.__init__(self, args)
-		Screen.setTitle(self, _("Skin setup"))
+		SkinSelectorBase.__init__(self, session)
+		screentitle = _("Skin setup")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.skinName = "SkinSelector"
 		self.config = config.skin.display_skin

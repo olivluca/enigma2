@@ -6,6 +6,7 @@
 #define ENABLE_FREESAT 1
 #define ENABLE_NETMED 1
 #define ENABLE_VIRGIN 1
+#define ENABLE_ATSC 1
 
 #ifndef SWIG
 
@@ -28,7 +29,7 @@
 #include <lib/service/event.h>
 #include <lib/python/python.h>
 
-class eventData;
+struct eventData;
 class eServiceReferenceDVB;
 class eDVBServicePMTHandler;
 
@@ -128,11 +129,11 @@ public:
 };
 #endif
 
-class eEPGCache: public eMainloop, private eThread, public Object
+class eEPGCache: public eMainloop, private eThread, public sigc::trackable
 {
 #ifndef SWIG
 	DECLARE_REF(eEPGCache)
-	struct channel_data: public Object
+	struct channel_data: public sigc::trackable
 	{
 		pthread_mutex_t channel_active;
 		channel_data(eEPGCache*);
@@ -197,6 +198,27 @@ class eEPGCache: public eMainloop, private eThread, public Object
 		void timeMHW2DVB( u_char day, u_char hours, u_char minutes, u_char *return_time);
 		void storeMHWTitle(std::map<uint32_t, mhw_title_t>::iterator itTitle, std::string sumText, const uint8_t *data);
 #endif
+#ifdef ENABLE_ATSC
+		int m_atsc_eit_index;
+		std::map<uint16_t, uint16_t> m_ATSC_VCT_map;
+		std::map<uint32_t, std::string> m_ATSC_ETT_map;
+		struct atsc_event
+		{
+			uint16_t eventId;
+			uint32_t startTime;
+			uint32_t lengthInSeconds;
+			std::string title;
+		};
+		std::map<uint32_t, struct atsc_event> m_ATSC_EIT_map;
+		ePtr<iDVBSectionReader> m_ATSC_VCTReader, m_ATSC_MGTReader, m_ATSC_EITReader, m_ATSC_ETTReader;
+		ePtr<eConnection> m_ATSC_VCTConn, m_ATSC_MGTConn, m_ATSC_EITConn, m_ATSC_ETTConn;
+		void ATSC_checkCompletion();
+		void ATSC_VCTsection(const uint8_t *d);
+		void ATSC_MGTsection(const uint8_t *d);
+		void ATSC_EITsection(const uint8_t *d);
+		void ATSC_ETTsection(const uint8_t *d);
+		void cleanupATSC();
+#endif
 		void readData(const uint8_t *data, int source);
 		void startChannel();
 		void startEPG();
@@ -244,8 +266,8 @@ public:
 	};
 	eFixedMessagePump<Message> messages;
 private:
-	friend class channel_data;
-	friend class eventData;
+	friend struct channel_data;
+	friend struct eventData;
 	static eEPGCache *instance;
 
 	typedef std::map<iDVBChannel*, channel_data*> ChannelMap;
@@ -258,6 +280,7 @@ private:
 	unsigned int historySeconds;
 
 	std::vector<int> onid_blacklist;
+	std::map<std::string,int> customeitpids;
 	eventCache eventDB;
 	updateMap channelLastUpdated;
 	std::string m_filename;
@@ -275,6 +298,7 @@ private:
 	void sectionRead(const uint8_t *data, int source, channel_data *channel);
 	void gotMessage(const Message &message);
 	void cleanLoop();
+	void submitEventData(const std::vector<int>& sids, const std::vector<eDVBChannelID>& chids, long start, long duration, const char* title, const char* short_summary, const char* long_description, char event_type, int source);
 
 // called from main thread
 	void DVBChannelAdded(eDVBChannel*);
@@ -319,9 +343,6 @@ private:
 	RESULT lookupEventTime(const eServiceReference &service, time_t, const eventData *&, int direction=0);
 
 public:
-	/* Only used by servicedvbrecord.cpp to write the EIT file */
-	RESULT saveEventToFile(const char* filename, const eServiceReference &service, int eit_event_id, time_t begTime, time_t endTime);
-
 	// Events are parsed epg events.. it's safe to use them after cache unlock
 	// after use the Event pointer must be released using "delete".
 	RESULT lookupEventId(const eServiceReference &service, int event_id, Event* &);
@@ -332,7 +353,9 @@ public:
 		SIMILAR_BROADCASTINGS_SEARCH,
 		EXAKT_TITLE_SEARCH,
 		PARTIAL_TITLE_SEARCH,
-		START_TITLE_SEARCH
+		START_TITLE_SEARCH,
+		END_TITLE_SEARCH,
+		PARTIAL_DESCRIPTION_SEARCH
 	};
 	enum {
 		CASE_CHECK,
@@ -340,6 +363,9 @@ public:
 	};
 	PyObject *lookupEvent(SWIG_PYOBJECT(ePyObject) list, SWIG_PYOBJECT(ePyObject) convertFunc=(PyObject*)0);
 	PyObject *search(SWIG_PYOBJECT(ePyObject));
+
+	/* Used by servicedvbrecord.cpp, timeshift, etc. to write the EIT file */
+	RESULT saveEventToFile(const char* filename, const eServiceReference &service, int eit_event_id, time_t begTime, time_t endTime);
 
 	// eServiceEvent are parsed epg events.. it's safe to use them after cache unlock
 	// for use from python ( members: m_start_time, m_duration, m_short_description, m_extended_description )
@@ -364,6 +390,9 @@ public:
 #ifdef ENABLE_VIRGIN
 	,VIRGIN_NOWNEXT=2048
 	,VIRGIN_SCHEDULE=4096
+#endif
+#ifdef ENABLE_ATSC
+	,ATSC_EIT=8192
 #endif
 	,EPG_IMPORT=0x80000000
 	};

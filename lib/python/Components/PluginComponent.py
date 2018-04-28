@@ -53,7 +53,7 @@ class PluginComponent:
 							plugin = my_import('.'.join(["Plugins", c, pluginname, "plugin"]))
 							plugins = plugin.Plugins(path=path)
 						except Exception, exc:
-							print "Plugin ", c + "/" + pluginname, "failed to load:", exc
+							print "[PluginComponent] Plugin ", c + "/" + pluginname, "failed to load:", exc
 							# supress errors due to missing plugin.py* files (badly removed plugin)
 							for fn in ('plugin.py', 'plugin.pyc', 'plugin.pyo'):
 								if os.path.exists(os.path.join(path, fn)):
@@ -63,9 +63,14 @@ class PluginComponent:
 									break
 							else:
 								if path.find('WebInterface') == -1:
-									print "Plugin probably removed, but not cleanly in", path
-									print "trying to remove:", path
-									rmtree(path)
+									print "[PluginComponent] Plugin probably removed, but not cleanly in", path
+									print "[PluginComponent] trying to remove:", path
+# rmtree will produce an error if path is a symlink, so...
+									if os.path.islink(path):
+										rmtree(os.path.realpath(path))
+										os.unlink(path)
+									else:
+										rmtree(path)
 							continue
 
 						# allow single entry not to be a list
@@ -82,7 +87,7 @@ class PluginComponent:
 							try:
 								keymapparser.readKeymap(keymap)
 							except Exception, exc:
-								print "keymap for plugin %s/%s failed to load: " % (c, pluginname), exc
+								print "[PluginComponent] keymap for plugin %s/%s failed to load: " % (c, pluginname), exc
 								self.warnings.append( (c + "/" + pluginname, str(exc)) )
 
 		# build a diff between the old list of plugins and the new one

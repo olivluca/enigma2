@@ -21,7 +21,7 @@ class eRCKey;
  *
  * Handles one remote control. Gets codes from a \ref eRCDriver. Produces events in \ref eRCInput.
  */
-class eRCDevice: public Object
+class eRCDevice: public sigc::trackable
 {
 protected:
 	eRCInput *input;
@@ -35,7 +35,7 @@ public:
 	 * \param input The \ref eRCDriver where this remote gets its codes from.
 	 */
 	eRCDevice(std::string id, eRCDriver *input);
-	~eRCDevice();
+	virtual ~eRCDevice();
 	/**
 	 * \brief Handles a device specific code.
 	 *
@@ -61,7 +61,7 @@ public:
 /**
  * Receives codes from one or more remote controls.
  */
-class eRCDriver: public Object
+class eRCDriver: public sigc::trackable
 {
 protected:
 	std::list<eRCDevice*> listeners;
@@ -89,7 +89,7 @@ public:
 	{
 		listeners.remove(dev);
 	}
-	~eRCDriver();
+	virtual ~eRCDriver();
 
 	void enable(int en) { enabled=en; }
 	virtual void setExclusive(bool) { }
@@ -111,6 +111,7 @@ public:
 class eRCInputEventDriver: public eRCDriver
 {
 protected:
+	bool m_remote_control;
 	int handle;
 	unsigned char evCaps[(EV_MAX / 8) + 1];
 	unsigned char keyCaps[(KEY_MAX / 8) + 1];
@@ -182,7 +183,7 @@ public:
 
 #endif
 
-class eRCInput: public Object
+class eRCInput: public sigc::trackable
 {
 	int locked;
 	static eRCInput *instance;
@@ -203,7 +204,7 @@ public:
 protected:
 	std::map<std::string,eRCDevice*,lstr> devices;
 public:
-	Signal1<void, const eRCKey&> keyEvent;
+	sigc::signal1<void, const eRCKey&> keyEvent;
 	eRCInput();
 	~eRCInput();
 

@@ -1,4 +1,3 @@
-from HTMLComponent import HTMLComponent
 from GUIComponent import GUIComponent
 from skin import parseFont
 
@@ -12,7 +11,7 @@ from timer import TimerEntry
 from Tools.Directories import resolveFilename, SCOPE_ACTIVE_SKIN
 
 
-class TimerList(HTMLComponent, GUIComponent, object):
+class TimerList(GUIComponent, object):
 #
 #  | <Name of the Timer>     <Service>  <orb.pos>|
 #  | <state>  <start, end>  |
@@ -52,7 +51,10 @@ class TimerList(HTMLComponent, GUIComponent, object):
 		else:
 			repeatedtext = begin[0] # date
 		if timer.justplay:
-			text = repeatedtext + ((" %s "+ _("(ZAP)")) % (begin[1]))
+			extra_text = _("(ZAP)")
+			if timer.pipzap:
+				extra_text = _("(ZAP as PiP)")
+			text = repeatedtext + ((" %s "+ extra_text) % (begin[1]))
 		else:
 			text = repeatedtext + ((" %s ... %s (%d " + _("mins") + ")") % (begin[1], FuzzyTime(timer.end)[1], (timer.end - timer.begin) / 60))
 		icon = None

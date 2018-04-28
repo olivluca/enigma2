@@ -60,6 +60,7 @@
 		<key id="KEY_9" mapto="9" flags="m"/>
 		<key id="KEY_0" mapto="0" flags="m"/>
 		<key id="KEY_FILE" mapto="file" flags="m"/>
+		<key id="KEY_MEDIA" mapto="file" flags="m"/>
 		<key id="KEY_VIDEO" mapto="file" flags="m"/>
 	</map>
 
@@ -121,8 +122,8 @@
 	</map>
 
 	<map context="InfobarChannelSelection">
-		<key id="KEY_LEFT" mapto="LeftPressed" flags="mr"/>
-		<key id="KEY_RIGHT" mapto="RightPressed" flags="mr"/>
+		<key id="KEY_LEFT" mapto="LeftPressed" flags="b"/>
+		<key id="KEY_RIGHT" mapto="RightPressed" flags="b"/>
 		<key id="KEY_UP" mapto="switchChannelUp" flags="b"/>
 		<key id="KEY_DOWN" mapto="switchChannelDown" flags="b"/>
 		<key id="KEY_UP" mapto="switchChannelUpLong" flags="l"/>
@@ -226,6 +227,8 @@
 		<key id="KEY_RADIO" mapto="openBouquetList" flags="l"/>
 		<key id="KEY_TV" mapto="showTv" flags="b"/>
 		<key id="KEY_TV" mapto="openBouquetList" flags="l"/>
+		<key id="KEY_TV2" mapto="showTv" flags="b"/>
+		<key id="KEY_TV2" mapto="openBouquetList" flags="l"/>
 		<key id="KEY_PROG1" mapto="openBouquetList" flags="m"/>
 		<key id="KEY_PROG2" mapto="openBouquetList" flags="m"/>
 		<key id="KEY_FILE" mapto="showMovies" flags="b"/>
@@ -617,6 +620,7 @@
 
 	<map context="TvRadioActions">
 		<key id="KEY_TV" mapto="keyTV" flags="m"/>
+		<key id="KEY_TV2" mapto="keyTV" flags="m"/>
 		<key id="KEY_RADIO" mapto="keyRadio" flags="m"/>
 	</map>
 
@@ -639,6 +643,10 @@
 		<key id="KEY_EPG" mapto="epg" flags="b"/>
 		<key id="KEY_TV" mapto="tv" flags="b"/>
 		<key id="KEY_TV" mapto="tvlong" flags="l"/>
+		<key id="KEY_TV2" mapto="tv" flags="b"/>
+		<key id="KEY_TV2" mapto="tvlong" flags="l"/>
+		<key id="KEY_FAVORITES" mapto="tv" flags="b"/>
+		<key id="KEY_FAVORITES" mapto="tvlong" flags="l"/>
 	</map>
 
 	<map context="EventViewActions">
@@ -801,6 +809,8 @@
 		<key id="KEY_BACK" mapto="stop" flags="m"/>
 		<key id="KEY_TV" mapto="stop" flags="b"/>
 		<key id="KEY_TV" mapto="shift_stop" flags="l"/>
+		<key id="KEY_TV2" mapto="stop" flags="b"/>
+		<key id="KEY_TV2" mapto="shift_stop" flags="l"/>
 
 		<key id="KEY_MENU" mapto="menu" flags="m"/>
 		<key id="KEY_SPACE" mapto="menu" flags="m"/>
@@ -891,6 +901,7 @@
 		<key id="KEY_RECORD" mapto="pvr_long" flags="l"/>
 		<key id="KEY_RADIO" mapto="radio" flags="b"/>
 		<key id="KEY_TV" mapto="showTv" flags="b"/>
+		<key id="KEY_TV2" mapto="showTv" flags="b"/>
 		<key id="KEY_TEXT" mapto="text" flags="b"/>
 		<key id="KEY_HELP" mapto="displayHelp" flags="b"/>
 		<key id="KEY_HELP" mapto="displayHelp_long" flags="l"/>
@@ -905,8 +916,10 @@
 		<key id="KEY_END" mapto="end" flags="b"/>
 		<key id="KEY_EPG" mapto="epg" flags="b"/>
 		<key id="KEY_EPG" mapto="epg_long" flags="l"/>
-		<key id="KEY_LEFT" mapto="cross_left" flags="mr"/>
-		<key id="KEY_RIGHT" mapto="cross_right" flags="mr"/>
+		<key id="KEY_LEFT" mapto="cross_left" flags="b"/>
+		<key id="KEY_RIGHT" mapto="cross_right" flags="b"/>
+		<key id="KEY_LEFT" mapto="cross_left_long" flags="l"/>
+		<key id="KEY_RIGHT" mapto="cross_right_long" flags="l"/>
 		<key id="KEY_UP" mapto="cross_up" flags="b"/>
 		<key id="KEY_DOWN" mapto="cross_down" flags="b"/>
 		<key id="KEY_CHANNELUP" mapto="channelup" flags="b"/>

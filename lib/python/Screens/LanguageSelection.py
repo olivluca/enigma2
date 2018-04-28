@@ -22,8 +22,20 @@ def LanguageEntryComponent(file, name, index):
 	return res
 
 class LanguageSelection(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
+		screentitle = _("Language")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 
 		self.oldActiveLanguage = language.getActiveLanguage()
 
@@ -46,7 +58,7 @@ class LanguageSelection(Screen):
 		}, -1)
 
 	def selectActiveLanguage(self):
-		self.setTitle(_("Language selection"))
+		self.setTitle(self.title)
 		pos = 0
 		for pos, x in enumerate(self.list):
 			if x[0] == self.oldActiveLanguage:
@@ -65,7 +77,7 @@ class LanguageSelection(Screen):
 		self.close()
 
 	def run(self):
-		print "updating language..."
+		print "[LanguageSelection] updating language..."
 		lang = self["languages"].getCurrent()[0]
 		if lang != config.osd.language.value:
 			config.osd.language.setValue(lang)
@@ -73,7 +85,7 @@ class LanguageSelection(Screen):
 		return lang
 
 	def commit(self, lang):
-		print "commit language"
+		print "[LanguageSelection] commit language"
 		language.activateLanguage(lang)
 		config.misc.languageselected.value = 0
 		config.misc.languageselected.save()

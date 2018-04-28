@@ -1,13 +1,16 @@
-from boxbranding import getImageVersion, getBoxType
+from boxbranding import getImageVersion, getMachineBuild
 from sys import modules
-import socket, fcntl, struct, time, os
+import socket, fcntl, struct
 
 def getVersionString():
 	return getImageVersion()
 
 def getFlashDateString():
 	try:
-		return time.strftime(_("%Y-%m-%d"), time.localtime(os.stat("/boot").st_ctime))
+		f = open("/etc/install","r")
+		flashdate = f.read()
+		f.close()
+		return flashdate
 	except:
 		return _("unknown")
 
@@ -27,37 +30,79 @@ def getKernelVersionString():
 	except:
 		return _("unknown")
 
+def getIsBroadcom():
+	try:
+		file = open('/proc/cpuinfo', 'r')
+		lines = file.readlines()
+		for x in lines:
+			splitted = x.split(': ')
+			if len(splitted) > 1:
+				splitted[1] = splitted[1].replace('\n','')
+				if splitted[0].startswith("Hardware"):
+					system = splitted[1].split(' ')[0]
+				elif splitted[0].startswith("system type"):
+					if splitted[1].split(' ')[0].startswith('BCM'):
+						system = 'Broadcom'
+		file.close()
+		if 'Broadcom' in system:
+			return True
+		else:
+			return False
+	except:
+		return False
+
 def getChipSetString():
 	try:
 		f = open('/proc/stb/info/chipset', 'r')
 		chipset = f.read()
 		f.close()
-		return str(chipset.lower().replace('\n','').replace('bcm','').replace('brcm',''))
+		return str(chipset.lower().replace('\n','').replace('brcm','').replace('bcm',''))
 	except IOError:
 		return _("unavailable")
 
 def getCPUSpeedString():
-	mhz = _("unavailable")
-	if getBoxType() == 'vusolo4k':
-		return "1.5 GHz"
-	else:
-		try:
-			file = open('/proc/cpuinfo', 'r')
-			lines = file.readlines()
-			for x in lines:
-				splitted = x.split(': ')
-				if len(splitted) > 1:
-					splitted[1] = splitted[1].replace('\n','')
-					if splitted[0].startswith("cpu MHz"):
-						mhz = float(splitted[1].split(' ')[0])
-						if mhz and mhz >= 1000:
-							mhz = "%s GHz" % str(round(mhz/1000,1))
-						else:
-							mhz = "%s MHz" % str(round(mhz,1))
-			file.close()
-			return mhz
-		except IOError:
-			return _("unavailable")
+	cpu_speed = 0
+	try:
+		file = open('/proc/cpuinfo', 'r')
+		lines = file.readlines()
+		file.close()
+		for x in lines:
+			splitted = x.split(': ')
+			if len(splitted) > 1:
+				splitted[1] = splitted[1].replace('\n','')
+				if splitted[0].startswith("cpu MHz"):
+					cpu_speed = float(splitted[1].split(' ')[0])
+					break
+	except IOError:
+		print "[About] getCPUSpeedString, /proc/cpuinfo not available"
+
+	if cpu_speed == 0:
+		if getMachineBuild() in ('hd51','hd52','sf4008'):
+			import binascii
+			f = open('/sys/firmware/devicetree/base/cpus/cpu@0/clock-frequency', 'rb')
+			clockfrequency = f.read()
+			f.close()
+			cpu_speed = round(int(binascii.hexlify(clockfrequency), 16)/1000000,1)
+		else:
+			try: # Solo4K
+				file = open('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq', 'r')
+				cpu_speed = float(file.read()) / 1000
+				file.close()
+			except IOError:
+				print "[About] getCPUSpeedString, /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq not available"
+
+	if cpu_speed > 0:
+		if cpu_speed >= 1000:
+			cpu_speed = "%sGHz" % str(round(cpu_speed/1000,1))
+		else:
+			cpu_speed = "%sMHz" % str(int(cpu_speed))
+		return cpu_speed
+	return _("unavailable")
+
+def getCPUArch():
+	if "ARM" in getCPUString():
+		return getCPUString()
+	return _("Mipsel")
 
 def getCPUString():
 	system = _("unavailable")
@@ -72,26 +117,32 @@ def getCPUString():
 					system = splitted[1].split(' ')[0]
 				elif splitted[0].startswith("model name"):
 					system = splitted[1].split(' ')[0]
+				elif splitted[0].startswith("Processor"):
+					system = splitted[1].split(' ')[0]
 		file.close()
 		return system
 	except IOError:
 		return _("unavailable")
 
 def getCpuCoresString():
+	MachinesCores = {
+					1 : 'Single core',
+					2 : 'Dual core',
+					4 : 'Quad core',
+					8 : 'Octo core'
+					}
 	try:
+		cores = 1
 		file = open('/proc/cpuinfo', 'r')
 		lines = file.readlines()
+		file.close()
 		for x in lines:
 			splitted = x.split(': ')
 			if len(splitted) > 1:
 				splitted[1] = splitted[1].replace('\n','')
 				if splitted[0].startswith("processor"):
-					if int(splitted[1]) > 0:
-						cores = 2
-					else:
-						cores = 1
-		file.close()
-		return cores
+					cores = int(splitted[1]) + 1
+		return MachinesCores[cores]
 	except IOError:
 		return _("unavailable")
 
@@ -130,20 +181,8 @@ def getIfTransferredData(ifname):
 			return rx_bytes, tx_bytes
 
 def getPythonVersionString():
-	try:
-		import commands
-		status, output = commands.getstatusoutput("python -V")
-		return output.split(' ')[1]
-	except:
-		return _("unknown")
-
-def getPythonVersionString():
-	try:
-		import commands
-		status, output = commands.getstatusoutput("python -V")
-		return output.split(' ')[1]
-	except:
-		return _("unknown")
+	import sys
+	return "%s.%s.%s" % (sys.version_info.major,sys.version_info.minor,sys.version_info.micro)
 
 # For modules that do "from About import about"
 about = modules[__name__]

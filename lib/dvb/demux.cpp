@@ -7,6 +7,35 @@
 #include <sys/sysinfo.h>
 #include <sys/mman.h>
 
+#include <linux/dvb/dmx.h>
+
+#include <lib/base/eerror.h>
+#include <lib/base/cfile.h>
+#include <lib/dvb/idvb.h>
+#include <lib/dvb/demux.h>
+#include <lib/dvb/esection.h>
+#include <lib/dvb/decoder.h>
+
+#include "crc32.h"
+
+#ifndef DMX_SET_SOURCE
+/**
+ * DMX_SET_SOURCE and dmx_source enum removed on 4.14 kernel
+ * Check commit 13adefbe9e566c6db91579e4ce17f1e5193d6f2c
+**/
+enum dmx_source {
+	DMX_SOURCE_FRONT0 = 0,
+	DMX_SOURCE_FRONT1,
+	DMX_SOURCE_FRONT2,
+	DMX_SOURCE_FRONT3,
+	DMX_SOURCE_DVR0   = 16,
+	DMX_SOURCE_DVR1,
+	DMX_SOURCE_DVR2,
+	DMX_SOURCE_DVR3
+};
+#define DMX_SET_SOURCE _IOW('o', 49, enum dmx_source)
+#endif
+
 //#define SHOW_WRITE_TIME
 static int determineBufferCount()
 {
@@ -30,22 +59,17 @@ static int determineBufferCount()
 
 static int recordingBufferCount = determineBufferCount();
 
-#include <linux/dvb/dmx.h>
-
-#include "crc32.h"
-
-#include <lib/base/eerror.h>
-#include <lib/dvb/idvb.h>
-#include <lib/dvb/demux.h>
-#include <lib/dvb/esection.h>
-#include <lib/dvb/decoder.h>
-
 eDVBDemux::eDVBDemux(int adapter, int demux):
 	adapter(adapter),
 	demux(demux),
 	source(-1),
-	m_dvr_busy(0)
+	m_dvr_busy(0),
+	m_dvr_id(-1),
+	m_dvr_source_offset(DMX_SOURCE_DVR0)
 {
+	if (CFile::parseInt(&m_dvr_source_offset, "/proc/stb/frontend/dvr_source_offset") == 0)
+		eDebug("[eDVBDemux] using %d for PVR DMX_SET_SOURCE", m_dvr_source_offset);
+
 }
 
 eDVBDemux::~eDVBDemux()
@@ -92,11 +116,12 @@ RESULT eDVBDemux::setSourcePVR(int pvrnum)
 {
 	int fd = openDemux();
 	if (fd < 0) return -1;
-	int n = DMX_SOURCE_DVR0 + pvrnum;
+	int n = m_dvr_source_offset + pvrnum;
 	int res = ::ioctl(fd, DMX_SET_SOURCE, &n);
 	if (res)
 		eDebug("[eDVBDemux] DMX_SET_SOURCE dvr%d failed: %m", pvrnum);
 	source = -1;
+	m_dvr_id = pvrnum;
 	::close(fd);
 	return res;
 }
@@ -167,7 +192,7 @@ RESULT eDVBDemux::flush()
 	return 0;
 }
 
-RESULT eDVBDemux::connectEvent(const Slot1<void,int> &event, ePtr<eConnection> &conn)
+RESULT eDVBDemux::connectEvent(const sigc::slot1<void,int> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;
@@ -189,7 +214,7 @@ void eDVBSectionReader::data(int)
 		unsigned int c;
 		if ((c = crc32((unsigned)-1, data, r)))
 		{
-			eDebug("[eDVBSectionReader] section crc32 failed! is %x\n", c);
+			//eDebug("[eDVBSectionReader] section crc32 failed! is %x\n", c);
 			return;
 		}
 	}
@@ -277,7 +302,7 @@ RESULT eDVBSectionReader::stop()
 	return 0;
 }
 
-RESULT eDVBSectionReader::connectRead(const Slot1<void,const uint8_t*> &r, ePtr<eConnection> &conn)
+RESULT eDVBSectionReader::connectRead(const sigc::slot1<void,const uint8_t*> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, read.connect(r));
 	return 0;
@@ -381,7 +406,7 @@ RESULT eDVBPESReader::stop()
 	return 0;
 }
 
-RESULT eDVBPESReader::connectRead(const Slot2<void,const uint8_t*,int> &r, ePtr<eConnection> &conn)
+RESULT eDVBPESReader::connectRead(const sigc::slot2<void,const uint8_t*,int> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_read.connect(r));
 	return 0;
@@ -498,7 +523,7 @@ int eDVBRecordFileThread::AsyncIO::poll()
 
 int eDVBRecordFileThread::AsyncIO::start(int fd, off_t offset, size_t nbytes, void* buffer)
 {
-	memset(&aio, 0, sizeof(struct aiocb)); // Documentation says "zero it before call".
+	memset(&aio, 0, sizeof(aiocb)); // Documentation says "zero it before call".
 	aio.aio_fildes = fd;
 	aio.aio_nbytes = nbytes;
 	aio.aio_offset = offset;   // Offset can be omitted with O_APPEND
@@ -600,6 +625,12 @@ void eDVBRecordFileThread::flush()
 	{
 		posix_fadvise(m_fd_dest, 0, 0, POSIX_FADV_DONTNEED);
 	}
+}
+
+eDVBRecordStreamThread::eDVBRecordStreamThread(int packetsize) :
+	eDVBRecordFileThread(packetsize, recordingBufferCount)
+{
+	eDebug("[eDVBRecordStreamThread] allocated %zu buffers of %zu kB", m_aio.size(), m_buffersize>>10);
 }
 
 int eDVBRecordStreamThread::writeData(int len)
@@ -714,7 +745,7 @@ RESULT eDVBTSRecorder::start()
 	flt.pid     = i->first;
 	++i;
 	flt.input   = DMX_IN_FRONTEND;
-	flt.flags   = 0;
+	flt.flags   = (m_packetsize == 192) ? 0x80000000 : 0;
 	int res = ::ioctl(m_source_fd, DMX_SET_PES_FILTER, &flt);
 	if (res)
 	{
@@ -863,7 +894,7 @@ RESULT eDVBTSRecorder::getFirstPTS(pts_t &pts)
 	return m_thread->getFirstPTS(pts);
 }
 
-RESULT eDVBTSRecorder::connectEvent(const Slot1<void,int> &event, ePtr<eConnection> &conn)
+RESULT eDVBTSRecorder::connectEvent(const sigc::slot1<void,int> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;

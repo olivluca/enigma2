@@ -14,6 +14,7 @@ dvb_libenigma_dvb_a_SOURCES = \
 	dvb/esection.cpp \
 	dvb/fastscan.cpp \
 	dvb/fbc.cpp \
+	dvb/filepush.cpp \
 	dvb/frontend.cpp \
 	dvb/frontendparms.cpp \
 	dvb/metaparser.cpp \
@@ -30,10 +31,12 @@ dvb_libenigma_dvb_a_SOURCES = \
 	dvb/volume.cpp \
 	dvb/streamserver.cpp \
 	dvb/pmtparse.cpp \
-	dvb/encoder.cpp
+	dvb/encoder.cpp \
+	dvb/atsc.cpp
 
 dvbincludedir = $(pkgincludedir)/lib/dvb
 dvbinclude_HEADERS = \
+	dvb/absdiff.h \
 	dvb/cablescan.h \
 	dvb/cahandler.h \
 	dvb/crc32.h \
@@ -47,6 +50,7 @@ dvbinclude_HEADERS = \
 	dvb/esection.h \
 	dvb/fastscan.h \
 	dvb/fbc.h \
+	dvb/filepush.h \
 	dvb/frontend.h \
 	dvb/frontendparms.h \
 	dvb/idemux.h \
@@ -68,4 +72,5 @@ dvbinclude_HEADERS = \
 	dvb/volume.h \
 	dvb/streamserver.h \
 	dvb/pmtparse.h \
-	dvb/encoder.h
+	dvb/encoder.h \
+	dvb/atsc.h

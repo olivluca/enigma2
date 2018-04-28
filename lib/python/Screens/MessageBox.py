@@ -187,7 +187,7 @@ class MessageBox(Screen):
 				self.timeoutCallback()
 
 	def timeoutCallback(self):
-		print "Timeout!"
+		print "[MessageBox] Timeout!"
 		if self.timeout_default is not None:
 			self.close(self.timeout_default)
 		else:
@@ -202,8 +202,7 @@ class MessageBox(Screen):
 					else:
 						self.close(False)
 					break
-		else:
-			self.close(False)
+		self.close(False)
 
 	def ok(self):
 		if self["list"].getCurrent():

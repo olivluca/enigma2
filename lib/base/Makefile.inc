@@ -6,6 +6,7 @@ base_libenigma_base_a_SOURCES = \
 	base/cfile.cpp \
 	base/connection.cpp \
 	base/console.cpp \
+	base/e2avahi.cpp \
 	base/ebase.cpp \
 	base/eenv.cpp \
 	base/eerror.cpp \
@@ -13,7 +14,6 @@ base_libenigma_base_a_SOURCES = \
 	base/encoding.cpp \
 	base/estring.cpp \
 	base/freesatv2.cpp \
-	base/filepush.cpp \
 	base/init.cpp \
 	base/ioprio.cpp \
 	base/message.cpp \
@@ -21,6 +21,7 @@ base_libenigma_base_a_SOURCES = \
 	base/rawfile.cpp \
 	base/smartptr.cpp \
 	base/thread.cpp \
+	base/httpsstream.cpp \
 	base/httpstream.cpp \
 	base/wrappers.cpp
 
@@ -33,6 +34,7 @@ baseinclude_HEADERS = \
 	base/cachedtssource.h \
 	base/cfile.h \
 	base/console.h \
+	base/e2avahi.h \
 	base/ebase.h \
 	base/eenv.h \
 	base/eerror.h \
@@ -40,7 +42,6 @@ baseinclude_HEADERS = \
 	base/encoding.h \
 	base/eptrlist.h \
 	base/estring.h \
-	base/filepush.h \
 	base/freesatv2.h \
 	base/i18n.h \
 	base/itssource.h \
@@ -54,5 +55,6 @@ baseinclude_HEADERS = \
 	base/ringbuffer.h \
 	base/smartptr.h \
 	base/thread.h \
+	base/httpsstream.h \
 	base/httpstream.h \
 	base/wrappers.h

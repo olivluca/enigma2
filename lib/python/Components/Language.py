@@ -8,6 +8,8 @@ from Tools.Directories import SCOPE_LANGUAGE, resolveFilename
 class Language:
 	def __init__(self):
 		gettext.install('enigma2', resolveFilename(SCOPE_LANGUAGE, ""), unicode=0, codeset="utf-8")
+		gettext.bindtextdomain("enigma2", resolveFilename(SCOPE_LANGUAGE))
+		gettext.textdomain("enigma2")
 		self.activeLanguage = 0
 		self.catalog = None
 		self.lang = {}
@@ -22,6 +24,7 @@ class Language:
 		self.addLanguage("Dansk", "da", "DK", "ISO-8859-15")
 		self.addLanguage("Deutsch", "de", "DE", "ISO-8859-15")
 		self.addLanguage("Ελληνικά", "el", "GR", "ISO-8859-7")
+		self.addLanguage("English (AU)", "en", "AU", "ISO-8859-1")
 		self.addLanguage("English (UK)", "en", "GB", "ISO-8859-15")
 		self.addLanguage("English (US)", "en", "US", "ISO-8859-15")
 		self.addLanguage("Español", "es", "ES", "ISO-8859-15")
@@ -52,7 +55,7 @@ class Language:
 		self.addLanguage("Svenska", "sv", "SE", "ISO-8859-15")
 		self.addLanguage("ภาษาไทย", "th", "TH", "ISO-8859-15")
 		self.addLanguage("Türkçe", "tr", "TR", "ISO-8859-15")
-		self.addLanguage("Ukrainian", "uk", "UA", "ISO-8859-15")
+		self.addLanguage("Українська", "uk", "UA", "ISO-8859-15")
 
 		self.callbacks = []
 
@@ -61,12 +64,12 @@ class Language:
 			self.lang[str(lang + "_" + country)] = ((name, lang, country, encoding))
 			self.langlist.append(str(lang + "_" + country))
 		except:
-			print "Language " + str(name) + " not found"
+			print "[Language] Language " + str(name) + " not found"
 
 	def activateLanguage(self, index):
 		try:
 			lang = self.lang[index]
-			print "Activating language " + lang[0]
+			print "[Language] Activating language " + lang[0]
 			self.catalog = gettext.translation('enigma2', resolveFilename(SCOPE_LANGUAGE, ""), languages=[index])
 			self.catalog.install(names=("ngettext", "pgettext"))
 			self.activeLanguage = index
@@ -74,7 +77,7 @@ class Language:
 				if x:
 					x()
 		except:
-			print "Selected language does not exist!"
+			print "[Language] Selected language does not exist!"
 		# NOTE: we do not use LC_ALL, because LC_ALL will not set any of the categories, when one of the categories fails.
 		# We'd rather try to set all available categories, and ignore the others
 		for category in [locale.LC_CTYPE, locale.LC_COLLATE, locale.LC_TIME, locale.LC_MONETARY, locale.LC_MESSAGES, locale.LC_NUMERIC]:

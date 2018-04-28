@@ -300,6 +300,7 @@ eDVBVideo::eDVBVideo(eDVBDemux *demux, int dev)
 #define VIDEO_STREAMTYPE_VC1_SM 5
 #define VIDEO_STREAMTYPE_MPEG1 6
 #define VIDEO_STREAMTYPE_H265_HEVC 7
+#define VIDEO_STREAMTYPE_AVS 16
 
 int eDVBVideo::startPid(int pid, int type)
 {
@@ -328,6 +329,9 @@ int eDVBVideo::startPid(int pid, int type)
 			break;
 		case H265_HEVC:
 			streamtype = VIDEO_STREAMTYPE_H265_HEVC;
+			break;
+		case AVS:
+			streamtype = VIDEO_STREAMTYPE_AVS;
 			break;
 		}
 
@@ -548,7 +552,7 @@ void eDVBVideo::video_event(int)
 	}
 }
 
-RESULT eDVBVideo::connectEvent(const Slot1<void, struct iTSMPEGDecoder::videoEvent> &event, ePtr<eConnection> &conn)
+RESULT eDVBVideo::connectEvent(const sigc::slot1<void, struct iTSMPEGDecoder::videoEvent> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;
@@ -846,7 +850,7 @@ int eTSMPEGDecoder::setState()
 		if ((m_vpid >= 0) && (m_vpid < 0x1FFF))
 		{
 			m_video = new eDVBVideo(m_demux, m_decoder);
-			m_video->connectEvent(slot(*this, &eTSMPEGDecoder::video_event), m_video_event_conn);
+			m_video->connectEvent(sigc::mem_fun(*this, &eTSMPEGDecoder::video_event), m_video_event_conn);
 			if (m_video->startPid(m_vpid, m_vtype))
 				res = -1;
 		}
@@ -958,7 +962,7 @@ eTSMPEGDecoder::eTSMPEGDecoder(eDVBDemux *demux, int decoder)
 {
 	if (m_demux)
 	{
-		m_demux->connectEvent(slot(*this, &eTSMPEGDecoder::demux_event), m_demux_event_conn);
+		m_demux->connectEvent(sigc::mem_fun(*this, &eTSMPEGDecoder::demux_event), m_demux_event_conn);
 	}
 	CONNECT(m_showSinglePicTimer->timeout, eTSMPEGDecoder::finishShowSinglePic);
 	m_state = stateStop;
@@ -1205,7 +1209,7 @@ RESULT eTSMPEGDecoder::showSinglePic(const char *filename)
 				unsigned char iframe[s.st_size];
 				unsigned char stuffing[8192];
 				int streamtype;
-				memset(stuffing, 0, 8192);
+				memset(stuffing, 0, sizeof(stuffing));
 				read(f, iframe, s.st_size);
 				if (iframe[0] == 0x00 && iframe[1] == 0x00 && iframe[2] == 0x00 && iframe[3] == 0x01 && (iframe[4] & 0x0f) == 0x07)
 					streamtype = VIDEO_STREAMTYPE_MPEG4_H264;
@@ -1263,7 +1267,7 @@ void eTSMPEGDecoder::finishShowSinglePic()
 	}
 }
 
-RESULT eTSMPEGDecoder::connectVideoEvent(const Slot1<void, struct videoEvent> &event, ePtr<eConnection> &conn)
+RESULT eTSMPEGDecoder::connectVideoEvent(const sigc::slot1<void, struct videoEvent> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_video_event.connect(event));
 	return 0;

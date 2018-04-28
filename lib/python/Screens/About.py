@@ -1,4 +1,6 @@
 from Screen import Screen
+from Screens.SoftwareUpdate import UpdatePlugin
+from Screens.GitCommitInfo import CommitInfo
 from Components.ActionMap import ActionMap
 from Components.Button import Button
 from Components.Sources.StaticText import StaticText
@@ -8,34 +10,55 @@ from Components.About import about
 from Components.ScrollLabel import ScrollLabel
 from Components.Console import Console
 from Components.config import config
-from enigma import eTimer, getEnigmaVersionString
-from boxbranding import getBoxType, getMachineBrand, getMachineName, getImageVersion, getImageType, getImageBuild, getDriverDate
-
+from enigma import eTimer, getEnigmaVersionString, getDesktop
+from boxbranding import getMachineBrand, getMachineName, getImageVersion, getImageType, getImageBuild, getDriverDate, getImageDevBuild
 from Components.Pixmap import MultiPixmap
 from Components.Network import iNetwork
-
 from Tools.StbHardware import getFPVersion
-
 from os import path
 from re import search
-
+import skin
 
 class About(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
-		Screen.setTitle(self, _("Image Information"))
+		screentitle = _("About")
+		self.menu_path = menu_path
+		if config.usage.show_menupath.value == 'large':
+			self.menu_path += screentitle
+			title = self.menu_path
+			self["menu_path_compressed"] = StaticText("")
+			self.menu_path += ' / '
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			condtext = ""
+			if self.menu_path and not self.menu_path.endswith(' / '):
+				condtext = self.menu_path + " >"
+			elif self.menu_path:
+				condtext = self.menu_path[:-3] + " >"
+			self["menu_path_compressed"] = StaticText(condtext)
+			self.menu_path += screentitle + ' / '
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.skinName = "AboutOE"
 		self.populate()
-		
+
+		self["key_red"] = Button(_("Close"))
 		self["key_green"] = Button(_("Translations"))
+		self["key_yellow"] = Button(_("Software update"))
+		self["key_blue"] = Button(_("Release notes"))
 		self["actions"] = ActionMap(["SetupActions", "ColorActions", "TimerEditActions", "DirectionActions"],
 									{
 										"cancel": self.close,
 										"ok": self.close,
-										"log": self.showAboutReleaseNotes,
 										"up": self["AboutScrollLabel"].pageUp,
 										"down": self["AboutScrollLabel"].pageDown,
+										"red": self.close,
 										"green": self.showTranslationInfo,
+										"yellow": self.showUpdatePlugin,
+										"blue": self.showAboutReleaseNotes,
 									})
 
 	def populate(self):
@@ -47,17 +70,19 @@ class About(Screen):
 
 		AboutText += _("Model:\t%s %s\n") % (getMachineBrand(), getMachineName())
 
-		if path.exists('/proc/stb/info/chipset'):
-			AboutText += _("Chipset:\tBCM%s\n") % about.getChipSetString()
+		if about.getChipSetString() != _("unavailable"):
+			if about.getIsBroadcom():
+				AboutText += _("Chipset:\tBCM%s\n") % about.getChipSetString().upper()
+			else:
+				AboutText += _("Chipset:\t%s\n") % about.getChipSetString().upper()
 
-		AboutText += _("CPU:\t%s\n") % about.getCPUString()
-		AboutText += _("CPU speed:\t%s\n") % about.getCPUSpeedString()
-		AboutText += _("Cores:\t%s\n") % about.getCpuCoresString()
-
-		AboutText += _("Version:\t%s\n") % getImageVersion()
-		AboutText += _("Build:\t%s\n") % getImageBuild()
-		AboutText += _("Image type:\t%s\n") % getImageType().title()
-		AboutText += _("Skin name:\t%s\n") % config.skin.primary_skin.value[0:-9]
+		AboutText += _("CPU:\t%s %s %s\n") % (about.getCPUArch(), about.getCPUSpeedString(), about.getCpuCoresString())
+		imageSubBuild = ""
+		if getImageType() != 'release':
+			imageSubBuild = ".%s" % getImageDevBuild()
+		AboutText += _("Image:\t%s.%s%s (%s)\n") % (getImageVersion(), getImageBuild(), imageSubBuild, getImageType().title())
+		skinWidth = getDesktop(0).size().width()
+		skinHeight = getDesktop(0).size().height()
 
 		string = getDriverDate()
 		year = string[0:4]
@@ -66,61 +91,108 @@ class About(Screen):
 		driversdate = '-'.join((year, month, day))
 		AboutText += _("Drivers:\t%s\n") % driversdate
 		AboutText += _("Kernel:\t%s\n") % about.getKernelVersionString()
-
 		AboutText += _("GStreamer:\t%s\n") % about.getGStreamerVersionString().replace("GStreamer ","")
 		AboutText += _("Python:\t%s\n") % about.getPythonVersionString()
-
 		AboutText += _("Installed:\t%s\n") % about.getFlashDateString()
-		AboutText += _("Last update:\t%s\n\n") % getEnigmaVersionString()
+		AboutText += _("Last update:\t%s\n") % getEnigmaVersionString()
+		AboutText += _("E2 (re)starts:\t%s\n") % config.misc.startCounter.value
+		AboutText += _("Skin:\t%s") % config.skin.primary_skin.value[0:-9] + _("  (%s x %s)") % (skinWidth, skinHeight) + "\n"
+
+		tempinfo = ""
+		if path.exists('/proc/stb/sensors/temp0/value'):
+			f = open('/proc/stb/sensors/temp0/value', 'r')
+			tempinfo = f.read()
+			f.close()
+		elif path.exists('/proc/stb/fp/temp_sensor'):
+			f = open('/proc/stb/fp/temp_sensor', 'r')
+			tempinfo = f.read()
+			f.close()
+		elif path.exists('/proc/stb/sensors/temp/value'):
+			f = open('/proc/stb/sensors/temp/value', 'r')
+			tempinfo = f.read()
+			f.close()
+		if tempinfo and int(tempinfo.replace('\n', '')) > 0:
+			mark = str('\xc2\xb0')
+			AboutText += _("System temp:\t%s") % tempinfo.replace('\n', '').replace(' ','') + mark + "C\n"
+
+		tempinfo = ""
+		if path.exists('/proc/stb/fp/temp_sensor_avs'):
+			f = open('/proc/stb/fp/temp_sensor_avs', 'r')
+			tempinfo = f.read()
+			f.close()
+		elif path.exists('/sys/devices/virtual/thermal/thermal_zone0/temp'):
+			try:
+				f = open('/sys/devices/virtual/thermal/thermal_zone0/temp', 'r')
+				tempinfo = f.read()
+				tempinfo = tempinfo[:-4]
+				f.close()
+			except:
+				tempinfo = ""
+		if tempinfo and int(tempinfo.replace('\n', '')) > 0:
+			mark = str('\xc2\xb0')
+			AboutText += _("Processor temp:\t%s") % tempinfo.replace('\n', '').replace(' ','') + mark + "C\n"
+		AboutLcdText = AboutText.replace('\t', ' ')
 
 		fp_version = getFPVersion()
 		if fp_version is None:
 			fp_version = ""
 		elif fp_version != 0:
-			fp_version = _("Frontprocessor version: %d") % fp_version
+			fp_version = _("FP version:\t%s") % fp_version
 			AboutText += fp_version + "\n"
 
-		tempinfo = ""
-		if path.exists('/proc/stb/sensors/temp0/value') and getBoxType() not in ('gbquad'):
-			f = open('/proc/stb/sensors/temp0/value', 'r')
-			tempinfo = f.read()
-			f.close()
-		elif path.exists('/proc/stb/fp/temp_sensor') and getBoxType() not in ('gbquad'):
-			f = open('/proc/stb/fp/temp_sensor', 'r')
-			tempinfo = f.read()
-			f.close()
-		if tempinfo and int(tempinfo.replace('\n', '')) > 0:
-			mark = str('\xc2\xb0')
-			AboutText += _("System temperature: %s%sC\n\n") % (tempinfo.replace('\n', ''), mark)
+		bootloader = ""
+		if path.exists('/sys/firmware/devicetree/base/bolt/tag'):
+				f = open('/sys/firmware/devicetree/base/bolt/tag', 'r')
+				bootloader = f.readline().replace('\x00', '').replace('\n', '')
+				f.close()
+				AboutText += _("Bootloader:\t%s\n") % (bootloader)
 
 		self["AboutScrollLabel"] = ScrollLabel(AboutText)
 
 	def showTranslationInfo(self):
-		self.session.open(TranslationInfo)
+		self.session.open(TranslationInfo, self.menu_path)
+
+	def showUpdatePlugin(self):
+		self.session.open(UpdatePlugin, self.menu_path)
 
 	def showAboutReleaseNotes(self):
-		self.session.open(ViewGitLog)
+		self.session.open(CommitInfo, self.menu_path)
 
 	def createSummary(self):
 		return AboutSummary
 
 class Devices(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path = ""):
 		Screen.__init__(self, session)
-		Screen.setTitle(self, _("Device Information"))
+		screentitle = _("Devices")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self["TunerHeader"] = StaticText(_("Detected tuners:"))
 		self["HDDHeader"] = StaticText(_("Detected devices:"))
 		self["MountsHeader"] = StaticText(_("Network servers:"))
 		self["nims"] = StaticText()
+		for count in (0, 1, 2, 3):
+			self["Tuner" + str(count)] = StaticText("")
 		self["hdd"] = StaticText()
 		self["mounts"] = StaticText()
 		self.list = []
 		self.activityTimer = eTimer()
 		self.activityTimer.timeout.get().append(self.populate2)
+		self["key_red"] = Button(_("Close"))
 		self["actions"] = ActionMap(["SetupActions", "ColorActions", "TimerEditActions"],
 									{
 										"cancel": self.close,
 										"ok": self.close,
+										"red": self.close,
 									})
 		self.onLayoutFinish.append(self.populate)
 
@@ -129,6 +201,8 @@ class Devices(Screen):
 		self["actions"].setEnabled(False)
 		scanning = _("Please wait while scanning for devices...")
 		self["nims"].setText(scanning)
+		for count in (0, 1, 2, 3):
+			self["Tuner" + str(count)].setText(scanning)
 		self["hdd"].setText(scanning)
 		self['mounts'].setText(scanning)
 		self.activityTimer.start(1)
@@ -137,12 +211,45 @@ class Devices(Screen):
 		self.activityTimer.stop()
 		self.Console = Console()
 		niminfo = ""
-		nims = nimmanager.nimList()
+		nims = nimmanager.nimListCompressed()
 		for count in range(len(nims)):
 			if niminfo:
 				niminfo += "\n"
 			niminfo += nims[count]
 		self["nims"].setText(niminfo)
+
+		nims = nimmanager.nimList()
+		if len(nims) <= 4 :
+			for count in (0, 1, 2, 3):
+				if count < len(nims):
+					self["Tuner" + str(count)].setText(nims[count])
+				else:
+					self["Tuner" + str(count)].setText("")
+		else:
+			desc_list = []
+			count = 0
+			cur_idx = -1
+			while count < len(nims):
+				data = nims[count].split(":")
+				idx = data[0].strip('Tuner').strip()
+				desc = data[1].strip()
+				if desc_list and desc_list[cur_idx]['desc'] == desc:
+					desc_list[cur_idx]['end'] = idx
+				else:
+					desc_list.append({'desc' : desc, 'start' : idx, 'end' : idx})
+					cur_idx += 1
+				count += 1
+
+			for count in (0, 1, 2, 3):
+				if count < len(desc_list):
+					if desc_list[count]['start'] == desc_list[count]['end']:
+						text = "Tuner %s: %s" % (desc_list[count]['start'], desc_list[count]['desc'])
+					else:
+						text = "Tuner %s-%s: %s" % (desc_list[count]['start'], desc_list[count]['end'], desc_list[count]['desc'])
+				else:
+					text = ""
+
+				self["Tuner" + str(count)].setText(text)
 
 		self.list = []
 		list2 = []
@@ -222,18 +329,32 @@ class Devices(Screen):
 
 
 class SystemMemoryInfo(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path = ""):
 		Screen.__init__(self, session)
-		Screen.setTitle(self, _("Memory Information"))
+		screentitle = _("Memory")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.skinName = ["SystemMemoryInfo", "About"]
 		self["lab1"] = StaticText(_("Virtuosso Image Xtreme"))
 		self["lab2"] = StaticText(_("By Team ViX"))
+		self["lab3"] = StaticText(_("Support at %s") % "www.world-of-satellite.com")
 		self["AboutScrollLabel"] = ScrollLabel()
 
+		self["key_red"] = Button(_("Close"))
 		self["actions"] = ActionMap(["SetupActions", "ColorActions"],
 									{
 										"cancel": self.close,
 										"ok": self.close,
+										"red": self.close,
 									})
 
 		out_lines = file("/proc/meminfo").readlines()
@@ -283,9 +404,20 @@ class SystemMemoryInfo(Screen):
 
 
 class SystemNetworkInfo(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path = ""):
 		Screen.__init__(self, session)
-		Screen.setTitle(self, _("Network Information"))
+		screentitle = _("Network")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		self.skinName = ["SystemNetworkInfo", "WlanStatus"]
 		self["LabelBSSID"] = StaticText()
 		self["LabelESSID"] = StaticText()
@@ -306,6 +438,9 @@ class SystemNetworkInfo(Screen):
 		self["statuspic"] = MultiPixmap()
 		self["statuspic"].setPixmapNum(1)
 		self["statuspic"].show()
+		self["devicepic"] = MultiPixmap()
+
+		self["AboutScrollLabel"] = ScrollLabel()
 
 		self.iface = None
 		self.createscreen()
@@ -320,7 +455,6 @@ class SystemNetworkInfo(Screen):
 				pass
 			self.resetList()
 			self.onClose.append(self.cleanup)
-		self.updateStatusbar()
 
 		self["key_red"] = StaticText(_("Close"))
 
@@ -331,6 +465,7 @@ class SystemNetworkInfo(Screen):
 										"up": self["AboutScrollLabel"].pageUp,
 										"down": self["AboutScrollLabel"].pageDown
 									})
+		self.onLayoutFinish.append(self.updateStatusbar)
 
 	def createscreen(self):
 		self.AboutText = ""
@@ -371,13 +506,32 @@ class SystemNetworkInfo(Screen):
 				self.AboutText += _("MAC:") + "\t" + wlan0['hwaddr'] + "\n"
 			self.iface = 'wlan0'
 
+		wlan3 = about.getIfConfig('wlan3')
+		if wlan3.has_key('addr'):
+			self.AboutText += _("IP:") + "\t" + wlan3['addr'] + "\n"
+			if wlan3.has_key('netmask'):
+				self.AboutText += _("Netmask:") + "\t" + wlan3['netmask'] + "\n"
+			if wlan3.has_key('hwaddr'):
+				self.AboutText += _("MAC:") + "\t" + wlan3['hwaddr'] + "\n"
+			self.iface = 'wlan3'
+
 		rx_bytes, tx_bytes = about.getIfTransferredData(self.iface)
 		self.AboutText += "\n" + _("Bytes received:") + "\t" + rx_bytes + "\n"
 		self.AboutText += _("Bytes sent:") + "\t" + tx_bytes + "\n"
 
+		self.console = Console()
+		self.console.ePopen('ethtool %s' % self.iface, self.SpeedFinished)
+
+	def SpeedFinished(self, result, retval, extra_args):
+		result_tmp = result.split('\n')
+		for line in result_tmp:
+			if 'Speed:' in line:
+				speed = line.split(': ')[1][:-4]
+				self.AboutText += _("Speed:") + "\t" + speed + _('Mb/s')
+
 		hostname = file('/proc/sys/kernel/hostname').read()
 		self.AboutText += "\n" + _("Hostname:") + "\t" + hostname + "\n"
-		self["AboutScrollLabel"] = ScrollLabel(self.AboutText)
+		self["AboutScrollLabel"].setText(self.AboutText)
 
 	def cleanup(self):
 		if self.iStatus:
@@ -392,14 +546,14 @@ class SystemNetworkInfo(Screen):
 		if data is not None:
 			if data is True:
 				if status is not None:
-					if self.iface == 'wlan0' or self.iface == 'ra0':
+					if self.iface == 'wlan0' or self.iface == 'wlan3' or self.iface == 'ra0':
 						if status[self.iface]["essid"] == "off":
-							essid = _("No Connection")
+							essid = _("No connection")
 						else:
 							essid = status[self.iface]["essid"]
 						if status[self.iface]["accesspoint"] == "Not-Associated":
 							accesspoint = _("Not-Associated")
-							essid = _("No Connection")
+							essid = _("No connection")
 						else:
 							accesspoint = status[self.iface]["accesspoint"]
 						if self.has_key("BSSID"):
@@ -409,7 +563,7 @@ class SystemNetworkInfo(Screen):
 
 						quality = status[self.iface]["quality"]
 						if self.has_key("quality"):
-							self.AboutText += _('Link Quality:') + '\t' + quality + '\n'
+							self.AboutText += _('Link quality:') + '\t' + quality + '\n'
 
 						if status[self.iface]["bitrate"] == '0':
 							bitrate = _("Unsupported")
@@ -420,7 +574,7 @@ class SystemNetworkInfo(Screen):
 
 						signal = status[self.iface]["signal"]
 						if self.has_key("signal"):
-							self.AboutText += _('Signal Strength:') + '\t' + signal + '\n'
+							self.AboutText += _('Signal strength:') + '\t' + signal + '\n'
 
 						if status[self.iface]["encryption"] == "off":
 							if accesspoint == "Not-Associated":
@@ -449,6 +603,7 @@ class SystemNetworkInfo(Screen):
 		self["IF"].setText(iNetwork.getFriendlyAdapterName(self.iface))
 		self["Statustext"].setText(_("Link:"))
 		if iNetwork.isWirelessInterface(self.iface):
+			self["devicepic"].setPixmapNum(1)
 			try:
 				self.iStatus.getDataForInterface(self.iface, self.getInfoCB)
 			except:
@@ -456,6 +611,8 @@ class SystemNetworkInfo(Screen):
 				self["statuspic"].show()
 		else:
 			iNetwork.getLinkState(self.iface, self.dataAvail)
+			self["devicepic"].setPixmapNum(0)
+		self["devicepic"].show()
 
 	def dataAvail(self, data):
 		self.LinkState = None
@@ -480,13 +637,11 @@ class SystemNetworkInfo(Screen):
 						self["statuspic"].setPixmapNum(0)
 					else:
 						self["statuspic"].setPixmapNum(1)
-					self["statuspic"].show()
 				else:
 					self["statuspic"].setPixmapNum(1)
-					self["statuspic"].show()
 			else:
 				self["statuspic"].setPixmapNum(1)
-				self["statuspic"].show()
+			self["statuspic"].show()
 		except:
 			pass
 
@@ -528,74 +683,21 @@ class AboutSummary(Screen):
 
 		self["AboutText"] = StaticText(AboutText)
 
-
-class ViewGitLog(Screen):
-	def __init__(self, session, args=None):
-		Screen.__init__(self, session)
-		self.skinName = "SoftwareUpdateChanges"
-		self.setTitle(_("OE Changes"))
-		self.logtype = 'oe'
-		self["text"] = ScrollLabel()
-		self['title_summary'] = StaticText()
-		self['text_summary'] = StaticText()
-		self["key_red"] = Button(_("Close"))
-		self["key_green"] = Button(_("OK"))
-		self["key_yellow"] = Button(_("Show E2 Log"))
-		self["myactions"] = ActionMap(['ColorActions', 'OkCancelActions', 'DirectionActions'],
-									  {
-										  'cancel': self.closeRecursive,
-										  'green': self.closeRecursive,
-										  "red": self.closeRecursive,
-										  "yellow": self.changelogtype,
-										  "left": self.pageUp,
-										  "right": self.pageDown,
-										  "down": self.pageDown,
-										  "up": self.pageUp
-									  }, -1)
-		self.onLayoutFinish.append(self.getlog)
-
-	def changelogtype(self):
-		if self.logtype == 'oe':
-			self["key_yellow"].setText(_("Show OE Log"))
-			self.setTitle(_("Enigma2 Changes"))
-			self.logtype = 'e2'
-		else:
-			self["key_yellow"].setText(_("Show E2 Log"))
-			self.setTitle(_("OE Changes"))
-			self.logtype = 'oe'
-		self.getlog()
-
-	def pageUp(self):
-		self["text"].pageUp()
-
-	def pageDown(self):
-		self["text"].pageDown()
-
-	def getlog(self):
-		fd = open('/etc/' + self.logtype + '-git.log', 'r')
-		releasenotes = fd.read()
-		fd.close()
-		releasenotes = releasenotes.replace('\nopenvix: build', "\n\nopenvix: build")
-		self["text"].setText(releasenotes)
-		summarytext = releasenotes
-		try:
-			self['title_summary'].setText(summarytext[0] + ':')
-			self['text_summary'].setText(summarytext[1])
-		except:
-			self['title_summary'].setText("")
-			self['text_summary'].setText("")
-
-	def unattendedupdate(self):
-		self.close((_("Unattended upgrade without GUI and reboot system"), "cold"))
-
-	def closeRecursive(self):
-		self.close((_("Cancel"), ""))
-
-
 class TranslationInfo(Screen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
-		Screen.setTitle(self, _("Translation Information"))
+		screentitle = _("Translations")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 		# don't remove the string out of the _(), or it can't be "translated" anymore.
 
 		# TRANSLATORS: Add here whatever should be shown in the "translator" about screen, up to 6 lines (use \n for newline)
@@ -614,7 +716,7 @@ class TranslationInfo(Screen):
 			infomap[type] = value
 		print infomap
 
-		self["key_red"] = Button(_("Cancel"))
+		self["key_red"] = Button(_("Close"))
 		self["TranslationInfo"] = StaticText(info)
 
 		translator_name = infomap.get("Language-Team", "none")

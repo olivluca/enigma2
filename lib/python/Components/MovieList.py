@@ -1,6 +1,7 @@
 import os
 import struct
 import random
+from time import localtime, strftime
 
 from GUIComponent import GUIComponent
 from Tools.FuzzyDate import FuzzyTime
@@ -9,15 +10,17 @@ from Components.config import config
 from Tools.LoadPixmap import LoadPixmap
 from Tools.Directories import SCOPE_ACTIVE_SKIN, resolveFilename
 from Screens.LocationBox import defaultInhibitDirs
+#GML:1
+from Tools.Trashcan import getTrashFolder
 import NavigationInstance
 import skin
 
 from enigma import eListboxPythonMultiContent, eListbox, gFont, iServiceInformation, eSize, RT_HALIGN_LEFT, RT_HALIGN_RIGHT, RT_VALIGN_CENTER, eServiceReference, eServiceCenter, eTimer
 
-AUDIO_EXTENSIONS = frozenset((".dts", ".mp3", ".wav", ".wave", ".ogg", ".flac", ".m4a", ".mp2", ".m2a", ".3gp", ".3g2", ".wma"))
-DVD_EXTENSIONS = ('.iso', '.img')
-IMAGE_EXTENSIONS = frozenset((".jpg", ".png", ".gif", ".bmp"))
-MOVIE_EXTENSIONS = frozenset((".mpg", ".vob", ".wav", ".m4v", ".mkv", ".avi", ".divx", ".dat", ".flv", ".mp4", ".mov", ".wmv", ".m2ts", ".asf"))
+AUDIO_EXTENSIONS = frozenset((".dts", ".mp3", ".wav", ".wave", ".oga", ".ogg", ".flac", ".m4a", ".mp2", ".m2a", ".wma", ".ac3", ".mka", ".aac", ".ape", ".alac"))
+DVD_EXTENSIONS = frozenset((".iso", ".img", ".nrg"))
+IMAGE_EXTENSIONS = frozenset((".jpg", ".png", ".gif", ".bmp", ".jpeg"))
+MOVIE_EXTENSIONS = frozenset((".mpg", ".vob", ".m4v", ".mkv", ".avi", ".divx", ".dat", ".flv", ".mp4", ".mov", ".wmv", ".asf", ".3gp", ".3g2", ".mpeg", ".mpe", ".rm", ".rmvb", ".ogm", ".ogv", ".m2ts", ".mts", ".webm"))
 KNOWN_EXTENSIONS = MOVIE_EXTENSIONS.union(IMAGE_EXTENSIONS, DVD_EXTENSIONS, AUDIO_EXTENSIONS)
 
 cutsParser = struct.Struct('>QI') # big-endian, 64-bit PTS and 32-bit type
@@ -144,6 +147,17 @@ class MovieList(GUIComponent):
 	HIDE_DESCRIPTION = 1
 	SHOW_DESCRIPTION = 2
 
+#GML:1
+# So MovieSelection.selectSortby() can find out whether we are 
+# in a Trash folder and, if so, what the last sort was
+# The numbering starts after SORT_* values above.
+# in MovieSelection.py (that has no SORT_GROUPWISE)
+#
+	TRASHSORT_SHOWRECORD = 11
+	TRASHSORT_SHOWDELETE = 12
+	UsingTrashSort = False
+	InTrashFolder = False
+
 	def __init__(self, root, sort_type=None, descr_state=None):
 		GUIComponent.__init__(self)
 		self.list = []
@@ -167,7 +181,9 @@ class MovieList(GUIComponent):
 		self.iconsWidth = 22
 		self.trashShift = 1
 		self.dirShift = 1
-		self.dateWidth = 150
+		self.dateWidth = 160
+		if config.usage.time.wide.value:
+			self.dateWidth = int(self.dateWidth * 1.15)
 		self.reloadDelayTimer = None
 		self.l = eListboxPythonMultiContent()
 		self.tags = set()
@@ -230,7 +246,7 @@ class MovieList(GUIComponent):
 				return
 		result = {}
 		for timer in NavigationInstance.instance.RecordTimer.timer_list:
-			if timer.isRunning() and not timer.justplay:
+			if timer.isRunning() and not timer.justplay and hasattr(timer, 'Filename'):
 				result[os.path.split(timer.Filename)[1]+'.ts'] = timer
 		if self.runningTimers == result:
 			return
@@ -293,6 +309,8 @@ class MovieList(GUIComponent):
 			self.spaceRight = int(value)
 		def dateWidth(value):
 			self.dateWidth = int(value)
+			if config.usage.time.wide.value:
+				self.dateWidth = int(self.dateWidth * 1.15)
 		for (attrib, value) in self.skinAttributes[:]:
 			try:
 				locals().get(attrib)(value)
@@ -330,6 +348,8 @@ class MovieList(GUIComponent):
 		switch = config.usage.show_icons_in_movielist.value
 		width = self.l.getItemSize().width()
 		dateWidth = self.dateWidth
+		if not config.movielist.use_fuzzy_dates.value:
+			dateWidth += 30
 		iconSize = self.iconsWidth
 		space = self.spaceIconeText
 		r = self.spaceRight
@@ -419,7 +439,10 @@ class MovieList(GUIComponent):
 
 		begin_string = ""
 		if begin > 0:
-			begin_string = ', '.join(FuzzyTime(begin, inPast = True))
+			if config.movielist.use_fuzzy_dates.value:
+				begin_string = ', '.join(FuzzyTime(begin, inPast = True))
+			else:
+				begin_string = strftime("%s, %s" % (config.usage.date.daylong.value, config.usage.time.short.value), localtime(begin))
 
 		ih = self.itemHeight
 		res.append(MultiContentEntryText(pos=(iconSize+space, 0), size=(width-iconSize-space-dateWidth-r, ih), font = 0, flags = RT_HALIGN_LEFT|RT_VALIGN_CENTER, text = data.txt))
@@ -537,6 +560,20 @@ class MovieList(GUIComponent):
 				ref.flags = eServiceReference.flagDirectory
 				self.list.append((ref, None, 0, -1))
 				numberOfDirs += 1
+
+#GML:1
+		if config.usage.movielist_trashcan.value:
+			here = os.path.realpath(rootPath)
+			MovieList.InTrashFolder = here.startswith(getTrashFolder(here))
+		else:
+	 		MovieList.InTrashFolder = False
+ 		MovieList.UsingTrashSort = False
+		if MovieList.InTrashFolder:
+			if (config.usage.trashsort_deltime.value == "show record time"):
+		 		MovieList.UsingTrashSort = MovieList.TRASHSORT_SHOWRECORD
+			elif (config.usage.trashsort_deltime.value == "show delete time"):
+		 		MovieList.UsingTrashSort = MovieList.TRASHSORT_SHOWDELETE
+
 		while 1:
 			serviceref = reflist.getNext()
 			if not serviceref.valid():
@@ -549,13 +586,23 @@ class MovieList(GUIComponent):
 			if info is None:
 				info = justStubInfo
 			begin = info.getInfo(serviceref, iServiceInformation.sTimeCreate)
+
+#GML:1
+			begin2 = 0
+			if MovieList.UsingTrashSort:
+				f_path = serviceref.getPath()
+				if os.path.exists(f_path):  # Override with deltime for sorting
+					if MovieList.UsingTrashSort == MovieList.TRASHSORT_SHOWRECORD:
+						begin2 = begin      # Save for later re-instatement
+					begin = os.stat(f_path).st_ctime
+
 			if serviceref.flags & eServiceReference.mustDescent:
 				dirname = info.getName(serviceref)
 				if not dirname.endswith('.AppleDouble/') and not dirname.endswith('.AppleDesktop/') and not dirname.endswith('.AppleDB/') and not dirname.endswith('Network Trash Folder/') and not dirname.endswith('Temporary Items/'):
 					self.list.append((serviceref, info, begin, -1))
 					numberOfDirs += 1
 				continue
-			# convert separe-separated list of tags into a set
+			# convert space-separated list of tags into a set
 			this_tags = info.getInfoString(serviceref, iServiceInformation.sTags).split(' ')
 			name = info.getName(serviceref)
 
@@ -569,7 +616,7 @@ class MovieList(GUIComponent):
 				# For auto tags, we are keeping a (tag, movies) dictionary.
 				#It will be used later to check if movies have a complete sentence in common.
 				for tag in this_tags:
-					if autotags.has_key(tag):
+					if tag in autotags:
 						autotags[tag].append(name)
 					else:
 						autotags[tag] = [name]
@@ -586,13 +633,28 @@ class MovieList(GUIComponent):
 # 					print "Skipping", name, "tags=", this_tags, " filter=", filter_tags
 					continue
 
-			self.list.append((serviceref, info, begin, -1))
+#GML:1
+			if begin2 != 0:
+				self.list.append((serviceref, info, begin, -1, begin2))
+			else:
+				self.list.append((serviceref, info, begin, -1))
 
 		self.firstFileEntry = numberOfDirs
 		self.parentDirectory = 0
 
 		self.list.sort(key=self.buildGroupwiseSortkey)
-		if self.sort_type == MovieList.SORT_ALPHANUMERIC:
+#GML:1
+		if MovieList.UsingTrashSort:      # Same as SORT_RECORDED, but must come first...
+			self.list = sorted(self.list[:numberOfDirs], key=self.buildBeginTimeSortKey) + sorted(self.list[numberOfDirs:], key=self.buildBeginTimeSortKey)
+# Having sorted on deletion times, re-instate any record times for display.
+# self.list is a list of tuples, so we can't just assign to elements...
+#
+			if config.usage.trashsort_deltime.value == "show record time":
+				for i in range(len(self.list)):
+					if len(self.list[i]) == 5:
+						x = self.list[i]
+						self.list[i] = (x[0], x[1], x[4], x[3])
+		elif self.sort_type == MovieList.SORT_ALPHANUMERIC:
 			self.list = sorted(self.list[:numberOfDirs], key=self.buildAlphaNumericSortKey) + sorted(self.list[numberOfDirs:], key=self.buildAlphaNumericSortKey)
 		elif self.sort_type == MovieList.SORT_ALPHANUMERIC_REVERSE:
 			self.list = sorted(self.list[:numberOfDirs], key=self.buildAlphaNumericSortKey, reverse = True) + sorted(self.list[numberOfDirs:], key=self.buildAlphaNumericSortKey, reverse = True)
@@ -716,7 +778,7 @@ class MovieList(GUIComponent):
 
 	def buildBeginTimeSortKey(self, x):
 		ref = x[0]
-		if ref.flags & eServiceReference.mustDescent:
+		if ref.flags & eServiceReference.mustDescent and os.path.exists(ref.getPath()):
 			return 0, x[1] and -os.stat(ref.getPath()).st_mtime
 		return 1, -x[2]
 
@@ -768,6 +830,9 @@ class MovieList(GUIComponent):
 			itemsBelow = self.list[currentIndex + 1:]
 			#first search the items below the selection
 			for index, item in enumerate(itemsBelow):
+# Just ignore any "root tagged" item - for which item[1] is None
+				if not item[1]:
+					continue
 				ref = item[0]
 				itemName = getShortName(item[1].getName(ref).upper(), ref)
 				if len(self._char) == 1 and itemName.startswith(self._char):
@@ -781,6 +846,9 @@ class MovieList(GUIComponent):
 		if found == False and currentIndex > 0:
 			itemsAbove = self.list[1:currentIndex] #first item (0) points parent folder - no point to include
 			for index, item in enumerate(itemsAbove):
+# Just ignore any "root tagged" item - for which item[1] is None
+				if not item[1]:
+					continue
 				ref = item[0]
 				itemName = getShortName(item[1].getName(ref).upper(), ref)
 				if len(self._char) == 1 and itemName.startswith(self._char):

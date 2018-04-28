@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--suppress XmlUnboundNsPrefix, XmlUnboundNsPrefix -->
+<!-- This skin is at github.com/OpenViX/enigma2/tree/master/data/vfd140 -->
 <skin>
 	<windowstyle id="1" type="skinned">
 		<color color="#000000" name="Background"/>
@@ -198,7 +199,7 @@
 <!-- standby -->
 	<screen name="StandbySummary" position="0,0" size="140,32">
 		<widget source="global.CurrentTime" render="Label" position="0,0" size="140,22" font="FdLcD;18" halign="left" noWrap="1">
-			<convert type="ClockToText">Format:%a  %e %b  %Y</convert>
+			<convert type="ClockToText">ShortDate</convert>
 		</widget>
 		<widget source="global.CurrentTime" render="Label" position="0,15" size="120,22" font="FdLcD;22" halign="left" noWrap="1">
 			<convert type="ClockToText">Format:%H:%M</convert>

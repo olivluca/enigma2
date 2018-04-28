@@ -42,7 +42,7 @@ void eRCDeviceInputDev::handleCode(long rccode)
 	if (km == eRCInput::kmAscii)
 	{
 		bool ignore = false;
-		bool ascii = (ev->code > 0 && ev->code < 61);
+		bool ascii = ev->code > 0 && ev->code < 59;
 
 		switch (ev->code)
 		{
@@ -98,6 +98,22 @@ void eRCDeviceInputDev::handleCode(long rccode)
 			/* 8k rc has a KEY_PLAYPAUSE key, which sends KEY_PLAY events. Correct this, so we do not have to place hacks in the keymaps. */
 			ev->code = KEY_PLAYPAUSE;
 		}
+	}
+#endif
+
+#if KEY_VIDEO_TO_KEY_FAVORITES
+	if (ev->code == KEY_VIDEO)
+	{
+		/* formuler rcu fav key send key_media change this to  KEY_FAVORITES */
+		ev->code = KEY_FAVORITES;
+	}
+#endif
+
+#if KEY_BOOKMARKS_TO_KEY_MEDIA
+	if (ev->code == KEY_BOOKMARKS)
+	{
+		/* formuler and triplex remote send wrong keycode */
+		ev->code = KEY_MEDIA;
 	}
 #endif
 
@@ -165,7 +181,17 @@ class eInputDeviceInit
 public:
 	eInputDeviceInit()
 	{
-		addAll();
+		int i = 0;
+		consoleFd = ::open("/dev/tty0", O_RDWR);
+		while (1)
+		{
+			char filename[32];
+			sprintf(filename, "/dev/input/event%d", i);
+			if (::access(filename, R_OK) < 0) break;
+			add(filename);
+			++i;
+		}
+		eDebug("[eInputDeviceInit] Found %d input devices.", i);
 	}
 
 	~eInputDeviceInit()
@@ -196,35 +222,6 @@ public:
 		}
 		eDebug("[eInputDeviceInit] Remove '%s', not found", filename);
 	}
-
-	void addAll(void)
-	{
-		int i = 0;
-		if (consoleFd < 0)
-		{
-			consoleFd = ::open("/dev/tty0", O_RDWR);
-			printf("consoleFd %d\n", consoleFd);
-		}
-		while (1)
-		{
-			char filename[32];
-			sprintf(filename, "/dev/input/event%d", i);
-			if (::access(filename, R_OK) < 0) break;
-			add(filename);
-			++i;
-		}
-		eDebug("Found %d input devices.", i);
-	}
-
-	void removeAll(void)
-	{
-		int size = items.size();
-		for (itemlist::iterator it = items.begin(); it != items.end(); ++it)
-		{
-			delete *it;
-		}
-		items.clear();
-	}
 };
 
 eAutoInitP0<eInputDeviceInit> init_rcinputdev(eAutoInitNumbers::rc+1, "input device driver");
@@ -237,14 +234,4 @@ void addInputDevice(const char* filename)
 void removeInputDevice(const char* filename)
 {
 	init_rcinputdev->remove(filename);
-}
-
-void addAllInputDevices(void)
-{
-	init_rcinputdev->addAll();
-}
-
-void removeAllInputDevices(void)
-{
-	init_rcinputdev->removeAll();
 }

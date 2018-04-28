@@ -7,12 +7,12 @@
 
 static std::string encode(const std::string s)
 {
-	int len = s.size();
 	std::string res;
-	int i;
-	for (i=0; i<len; ++i)
+
+	res.reserve(s.size());
+	for (std::string::const_iterator it = s.begin(); it != s.end(); ++it)
 	{
-		unsigned char c = s[i];
+		const unsigned char c = *it;
 		if ((c == ':') || (c < 32) || (c == '%'))
 		{
 			res += "%";
@@ -27,23 +27,55 @@ static std::string encode(const std::string s)
 
 eServiceReference::eServiceReference(const std::string &string)
 {
-	const char *c=string.c_str();
-	int pathl=0;
+	const char *c = string.c_str();
+	int pathl = 0;
+
 	number = 0;
 
-	if (!string.length())
-		type = idInvalid;
-	else if ( sscanf(c, "%d:%d:%x:%x:%x:%x:%x:%x:%x:%x:%n", &type, &flags, &data[0], &data[1], &data[2], &data[3], &data[4], &data[5], &data[6], &data[7], &pathl) < 8 )
+	if (string.empty())
 	{
-		memset( data, 0, sizeof(data) );
+		type = idInvalid;
+		return;
+	}
+
+	if (isalpha(*c))
+	{
+		eDebug("[eServiceReference] May be unencoded URL: %s", c);
+		const char *colon = strchr(c, ':');
+		if ((colon) && !strncmp(colon, "://", 3))
+		{
+			type = idServiceMP3;
+			memset(data, 0, sizeof(data));
+			/* Allow space separated name */
+			const char *space = strchr(colon, ' ');
+			if (space)
+			{
+				path.assign(c, space - c);
+				name = space + 1;
+			}
+			else
+			{
+				path = string;
+				name = string;
+			}
+			eDebug("[eServiceReference] URL=%s name=%s", path.c_str(), name.c_str());
+			return;
+		}
+	}
+
+	int ret = sscanf(c, "%d:%d:%x:%x:%x:%x:%x:%x:%x:%x:%n", &type, &flags, &data[0], &data[1], &data[2], &data[3], &data[4], &data[5], &data[6], &data[7], &pathl);
+	if (ret < 8 )
+	{
+		memset(data, 0, sizeof(data));
+		ret = sscanf(c, "%d:%d:%x:%x:%x:%x:%n", &type, &flags, &data[0], &data[1], &data[2], &data[3], &pathl);
 		eDebug("[eServiceReference] find old format eServiceReference string");
-		if ( sscanf(c, "%d:%d:%x:%x:%x:%x:%n", &type, &flags, &data[0], &data[1], &data[2], &data[3], &pathl) < 2 )
+		if (ret < 2)
 			type = idInvalid;
 	}
 
 	if (pathl)
 	{
-		const char *pathstr = c+pathl;
+		const char *pathstr = c + pathl;
 		const char *namestr = strchr(pathstr, ':');
 		if (namestr)
 		{
@@ -85,25 +117,40 @@ eServiceReference::eServiceReference(const std::string &string)
 std::string eServiceReference::toString() const
 {
 	std::string ret;
+	ret.reserve((6 * sizeof(data)/sizeof(*data)) + 8 + path.length() + name.length()); /* Estimate required space */
+
 	ret += getNum(type);
-	ret += ":";
+	ret += ':';
 	ret += getNum(flags);
-	for (unsigned int i=0; i<sizeof(data)/sizeof(*data); ++i)
-		ret+=":"+ getNum(data[i], 0x10);
-	ret+=":"+encode(path); /* we absolutely have a problem when the path contains a ':' (for example: http://). we need an encoding here. */
-	if (name.length())
-		ret+=":"+encode(name);
+	for (unsigned int i = 0; i < sizeof(data)/sizeof(*data); ++i)
+	{
+		ret += ':';
+		ret += getNum(data[i], 0x10);
+	}
+	ret += ':';
+	ret += encode(path); /* we absolutely have a problem when the path contains a ':' (for example: http://). we need an encoding here. */
+	if (!name.empty())
+	{
+		ret += ':';
+		ret += encode(name);
+	}
 	return ret;
 }
 
 std::string eServiceReference::toCompareString() const
 {
 	std::string ret;
+	ret.reserve((6 * sizeof(data)/sizeof(*data)) + 8 + path.length()); /* Estimate required space */
+
 	ret += getNum(type);
 	ret += ":0";
 	for (unsigned int i=0; i<sizeof(data)/sizeof(*data); ++i)
-		ret+=":"+getNum(data[i], 0x10);
-	ret+=":"+encode(path);
+	{
+		ret += ':';
+		ret += getNum(data[i], 0x10);
+	}
+	ret += ':';
+	ret += encode(path);
 	return ret;
 }
 
@@ -334,7 +381,7 @@ ePtr<iDVBTransponderData> iServiceInformation::getTransponderData()
 	return retval;
 }
 
-void iServiceInformation::getCaIds(std::vector<int> &caids, std::vector<int> &ecmpids)
+void iServiceInformation::getCaIds(std::vector<int> &caids, std::vector<int> &ecmpids, std::vector<std::string> &ecmdatabytes)
 {
 }
 

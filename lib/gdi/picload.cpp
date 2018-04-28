@@ -4,7 +4,6 @@
 
 #include <lib/base/cfile.h>
 #include <lib/gdi/picload.h>
-#include <lib/gdi/picexif.h>
 
 extern "C" {
 #define HAVE_BOOLEAN
@@ -217,7 +216,7 @@ static unsigned char *bmp_load(const char *file,  int *x, int *y)
 
 //---------------------------------------------------------------------
 
-static void png_load(Cfilepara* filepara, int background, bool forceRGB = false)
+static void png_load(Cfilepara* filepara, int background, bool forceRGB=false)
 {
 	png_uint_32 width, height;
 	unsigned int i;
@@ -479,7 +478,11 @@ static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 	int cmaps;
 	int extcode;
 
+#if GIFLIB_MAJOR > 5 || GIFLIB_MAJOR == 5 && GIFLIB_MINOR >= 1
+	gft = DGifOpenFileName(filepara->file, &extcode);
+#else
 	gft = DGifOpenFileName(filepara->file);
+#endif
 	if (gft == NULL)
 		return;
 	do
@@ -550,7 +553,7 @@ static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 							filepara->bits = 24;
 							filepara->pic_buffer = pic_buffer2;
 							delete [] pic_buffer;
-							delete filepara->palette;
+							delete [] filepara->palette;
 							filepara->palette = NULL;
 						}
 					}
@@ -569,11 +572,19 @@ static void gif_load(Cfilepara* filepara, bool forceRGB = false)
 	}
 	while (rt != TERMINATE_RECORD_TYPE);
 
+#if GIFLIB_MAJOR > 5 || GIFLIB_MAJOR == 5 && GIFLIB_MINOR >= 1
+	DGifCloseFile(gft, &extcode);
+#else
 	DGifCloseFile(gft);
+#endif
 	return;
 ERROR_R:
 	eDebug("[ePicLoad] <Error gif>");
+#if GIFLIB_MAJOR > 5 || GIFLIB_MAJOR == 5 && GIFLIB_MINOR >= 1
+	DGifCloseFile(gft, &extcode);
+#else
 	DGifCloseFile(gft);
+#endif
 }
 
 //---------------------------------------------------------------------------------------------
@@ -637,7 +648,7 @@ void ePicLoad::decodePic()
 {
 	eDebug("[ePicLoad] decode picture... %s", m_filepara->file);
 
-	getExif(m_filepara->file);
+	getExif(m_filepara->file, m_filepara->id);
 	switch(m_filepara->id)
 	{
 		case F_PNG:	png_load(m_filepara, m_conf.background);
@@ -660,16 +671,19 @@ void ePicLoad::decodeThumb()
 	std::string cachefile = "";
 	std::string cachedir = "/.Thumbnails";
 
-	getExif(m_filepara->file, 1);
+	getExif(m_filepara->file, m_filepara->id, 1);
 	if (m_exif && m_exif->m_exifinfo->IsExif)
 	{
 		if (m_exif->m_exifinfo->Thumnailstate == 2)
 		{
 			free(m_filepara->file);
 			m_filepara->file = strdup(THUMBNAILTMPFILE);
+			m_filepara->id = F_JPEG; // imbedded thumbnail seem to be jpeg
 			exif_thumbnail = true;
-			eDebug("[ePicLoad] Exif Thumbnail found");
+			eDebug("[ePicLoad] decodeThumb: Exif Thumbnail found");
 		}
+		//else
+		//	eDebug("[ePicLoad] decodeThumb: NO Exif Thumbnail found");
 		m_filepara->addExifInfo(m_exif->m_exifinfo->CameraMake);
 		m_filepara->addExifInfo(m_exif->m_exifinfo->CameraModel);
 		m_filepara->addExifInfo(m_exif->m_exifinfo->DateTime);
@@ -677,6 +691,8 @@ void ePicLoad::decodeThumb()
 		snprintf(buf, 20, "%d x %d", m_exif->m_exifinfo->Width, m_exif->m_exifinfo->Height);
 		m_filepara->addExifInfo(buf);
 	}
+	else
+		eDebug("[ePicLoad] decodeThumb: NO Exif info");
 
 	if (!exif_thumbnail && m_conf.usecache)
 	{
@@ -696,7 +712,7 @@ void ePicLoad::decodeThumb()
 			sprintf(crcstr, "%08lX", crc32);
 
 			cachedir = m_filepara->file;
-			unsigned int pos = cachedir.find_last_of("/");
+			size_t pos = cachedir.find_last_of("/");
 			if (pos != std::string::npos)
 				cachedir = cachedir.substr(0, pos) + "/.Thumbnails";
 
@@ -707,7 +723,7 @@ void ePicLoad::decodeThumb()
 				free(m_filepara->file);
 				m_filepara->file = strdup(cachefile.c_str());
 				m_filepara->id = F_JPEG;
-				eDebug("[ePicLoad] Cache File found");
+				eDebug("[ePicLoad] Cache File %s found", cachefile.c_str());
 			}
 		}
 	}
@@ -723,6 +739,7 @@ void ePicLoad::decodeThumb()
 		case F_GIF:	gif_load(m_filepara, true);
 				break;
 	}
+	//eDebug("[ePicLoad] getThumb picture loaded %s", m_filepara->file);
 
 	if (exif_thumbnail)
 		::unlink(THUMBNAILTMPFILE);
@@ -748,12 +765,13 @@ void ePicLoad::decodeThumb()
 				imy = (int)( (m_conf.thumbnailsize * ((double)m_filepara->oy)) / ((double)m_filepara->ox) );
 			}
 
+			// eDebug("[ePicLoad] getThumb resize from %dx%d to %dx%d", m_filepara->ox, m_filepara->oy, imx, imy);
 			m_filepara->pic_buffer = color_resize(m_filepara->pic_buffer, m_filepara->ox, m_filepara->oy, imx, imy);
 			m_filepara->ox = imx;
 			m_filepara->oy = imy;
 
 			if (jpeg_save(cachefile.c_str(), m_filepara->ox, m_filepara->oy, m_filepara->pic_buffer))
-				eDebug("[ePicLoad] error saving cachefile");
+				eDebug("[ePicLoad] getThumb: error saving cachefile");
 		}
 	}
 }
@@ -864,7 +882,8 @@ PyObject *ePicLoad::getInfo(const char *filename)
 {
 	ePyObject list;
 
-	getExif(filename);
+	// FIXME : m_filepara destroyed by getData. Need refactor this but plugins rely in it :(
+	getExif(filename, m_filepara ? m_filepara->id : -1);
 	if(m_exif && m_exif->m_exifinfo->IsExif)
 	{
 		char tmp[256];
@@ -912,11 +931,13 @@ PyObject *ePicLoad::getInfo(const char *filename)
 	return list ? (PyObject*)list : (PyObject*)PyList_New(0);
 }
 
-bool ePicLoad::getExif(const char *filename, int Thumb)
+bool ePicLoad::getExif(const char *filename, int fileType, int Thumb)
 {
 	if (!m_exif) {
 		m_exif = new Cexif;
-		return m_exif->DecodeExif(filename, Thumb);
+		if (fileType < 0)
+			fileType = getFileType(filename);
+		return m_exif->DecodeExif(filename, Thumb, fileType);
 	}
 	return true;
 }
@@ -1006,9 +1027,20 @@ int ePicLoad::getData(ePtr<gPixmap> &result)
 		}
 		unsigned int* row_buffer;
 		if (yoff != 0) {
-			row_buffer = (unsigned int *) tmp_buffer;
-			for (int x = 0; x < m_filepara->max_x; ++x) // fill first line
-				*row_buffer++ = background;
+			if (m_filepara->bits == 8)
+			{
+				unsigned char* row_buffer;
+				row_buffer = (unsigned char *) tmp_buffer;
+				for (int x = 0; x < m_filepara->max_x; ++x) // fill first line
+					*row_buffer++ = background;
+			}
+			else
+			{
+				unsigned int* row_buffer;
+				row_buffer = (unsigned int *) tmp_buffer;
+				for (int x = 0; x < m_filepara->max_x; ++x) // fill first line
+					*row_buffer++ = background;
+			}
 			int y;
 			#pragma omp parallel for
 			for (y = 1; y < yoff; ++y) // copy from first line
@@ -1020,13 +1052,25 @@ int ePicLoad::getData(ePtr<gPixmap> &result)
 					m_filepara->max_x * surface->bypp);
 		}
 		if (xoff != 0) {
-			row_buffer = (unsigned int *) (tmp_buffer + yoff * surface->stride);
-			int x;
-			for (x = 0; x < xoff; ++x) // fill left side of first line
-				*row_buffer++ = background;
-			row_buffer += scrx;
-			for (x = xoff + scrx; x < m_filepara->max_x; ++x) // fill right side of first line
-				*row_buffer++ = background;
+			if (m_filepara->bits == 8)
+			{
+				unsigned char* row_buffer = (unsigned char *) (tmp_buffer + yoff * surface->stride);
+				int x;
+				for (x = 0; x < xoff; ++x) // fill left side of first line
+					*row_buffer++ = background;
+				row_buffer += scrx;
+				for (x = xoff + scrx; x < m_filepara->max_x; ++x) // fill right side of first line
+					*row_buffer++ = background;
+			}
+			else {
+				unsigned int* row_buffer = (unsigned int *) (tmp_buffer + yoff * surface->stride);
+				int x;
+				for (x = 0; x < xoff; ++x) // fill left side of first line
+					*row_buffer++ = background;
+				row_buffer += scrx;
+				for (x = xoff + scrx; x < m_filepara->max_x; ++x) // fill right side of first line
+					*row_buffer++ = background;
+			}
 			#pragma omp parallel for
 			for (int y = yoff + 1; y < scry; ++y) { // copy from first line
 				memcpy(tmp_buffer + y*surface->stride,

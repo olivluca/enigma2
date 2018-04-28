@@ -2,9 +2,16 @@
 #define __dvb_sec_h
 
 #include <lib/dvb/idvb.h>
+#include <lib/dvb/fbc.h>
+
 #include <list>
 
-#include <lib/dvb/fbc.h>
+typedef enum
+{
+	SatCR_format_none = 0,
+	SatCR_format_unicable = 1,
+	SatCR_format_jess = 2
+} SatCR_format_t;
 
 #ifndef SWIG
 class eSecCommand
@@ -24,6 +31,7 @@ public:
 		UPDATE_CURRENT_SWITCHPARMS, INVALIDATE_CURRENT_SWITCHPARMS,
 		IF_ROTORPOS_VALID_GOTO,
 		IF_TUNER_LOCKED_GOTO,
+		IF_LOCK_TIMEOUT_GOTO,
 		IF_TONE_GOTO, IF_NOT_TONE_GOTO,
 		START_TUNE_TIMEOUT,
 		SET_ROTOR_MOVING,
@@ -235,11 +243,14 @@ public:
 
 class eDVBSatelliteLNBParameters
 {
+	public:
+		eDVBSatelliteLNBParameters()
+		{
+			SatCR_format = SatCR_format_none;
+		}
 #ifdef SWIG
-	eDVBSatelliteLNBParameters();
-	~eDVBSatelliteLNBParameters();
+		~eDVBSatelliteLNBParameters();
 #endif
-public:
 	enum t_12V_relais_state { OFF=0, ON };
 #ifndef SWIG
 	t_12V_relais_state m_12V_relais_state;	// 12V relais output on/off
@@ -262,10 +273,12 @@ public:
 #define guard_offset_min -8000
 #define guard_offset_max 8000
 #define guard_offset_step 8000
-#define MAX_SATCR 8
+#define MAX_SATCR 32
 #define MAX_LNBNUM 32
 
+	SatCR_format_t SatCR_format;
 	int SatCR_positions;
+	int SatCR_position;
 	int SatCR_idx;
 	unsigned int SatCRvco;
 	unsigned int UnicableTuningWord;
@@ -308,7 +321,7 @@ public:
 private:
 #ifndef SWIG
 	static eDVBSatelliteEquipmentControl *instance;
-	eDVBSatelliteLNBParameters m_lnbs[144]; // i think its enough
+	std::vector<eDVBSatelliteLNBParameters> m_lnbs;
 	int m_lnbidx; // current index for set parameters
 	std::map<int, eDVBSatelliteSwitchParameters>::iterator m_curSat;
 	eSmartPtrList<eDVBRegisteredFrontend> &m_avail_frontends, &m_avail_simulate_frontends;
@@ -326,9 +339,9 @@ public:
 #ifndef SWIG
 	eDVBSatelliteEquipmentControl(eSmartPtrList<eDVBRegisteredFrontend> &avail_frontends, eSmartPtrList<eDVBRegisteredFrontend> &avail_simulate_frontends);
 	RESULT prepare(iDVBFrontend &frontend, const eDVBFrontendParametersSatellite &sat, int &frequency, int frontend_id, unsigned int tunetimeout);
-	void prepareTurnOffSatCR(iDVBFrontend &frontend, int satcr); // used for unicable
+	void prepareTurnOffSatCR(iDVBFrontend &frontend);
 	int canTune(const eDVBFrontendParametersSatellite &feparm, iDVBFrontend *, int frontend_id, int *highest_score_lnb=0);
-	bool currentLNBValid() { return m_lnbidx > -1 && m_lnbidx < (int)(sizeof(m_lnbs) / sizeof(eDVBSatelliteLNBParameters)); }
+	bool currentLNBValid() { return m_lnbidx > -1 && static_cast<unsigned int>(m_lnbidx) < m_lnbs.size(); }
 #endif
 	static eDVBSatelliteEquipmentControl *getInstance() { return instance; }
 	static void setParam(int param, int value);
@@ -363,9 +376,13 @@ public:
 	RESULT setLNBSatCR(int SatCR_idx);
 	RESULT setLNBSatCRvco(int SatCRvco);
 	RESULT setLNBSatCRpositions(int SatCR_positions);
+	RESULT setLNBSatCRformat(SatCR_format_t SatCR_format);
+	RESULT setLNBSatCRPositionNumber(unsigned int position_number);
 	RESULT getLNBSatCR();
 	RESULT getLNBSatCRvco();
 	RESULT getLNBSatCRpositions();
+	RESULT getLNBSatCRformat();
+	RESULT getLNBSatCRPositionNumber();
 /* Satellite Specific Parameters */
 	RESULT addSatellite(int orbital_position);
 	RESULT setVoltageMode(int mode);
@@ -380,7 +397,8 @@ public:
 	bool isRotorMoving();
 	bool canMeasureInputPower() { return m_canMeasureInputPower; }
 	int getTargetOrbitalPosition() { return m_target_orbital_position; }
-	
+	bool isOrbitalPositionConfigured(int orbital_position);
+
 	friend class eFBCTunerManager;
 };
 

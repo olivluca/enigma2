@@ -48,10 +48,7 @@ class InputBox(Screen):
 		}, -1)
 
 		if self["input"].type == Input.TEXT:
-			if config.misc.remotecontrol_text_support.value:
-				self.onExecBegin.append(self.setKeyboardModeNone)
-			else:
-				self.onExecBegin.append(self.setKeyboardModeAscii)
+			self.onExecBegin.append(self.setKeyboardModeAscii)
 		else:
 			self.onExecBegin.append(self.setKeyboardModeNone)
 
@@ -160,7 +157,7 @@ class PinInput(InputBox):
 				self.close(None)
 
 	def closePinWrong(self, *args):
-		print "args:", args
+		print "[InputBox] args:", args
 		self.close(False)
 
 	def closePinCorrect(self, *args):

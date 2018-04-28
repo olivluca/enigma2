@@ -12,21 +12,32 @@ from Tools.LoadPixmap import LoadPixmap
 from boxbranding import getBoxType, getMachineBrand, getMachineName
 
 class InputDeviceSelection(Screen, HelpableScreen):
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
 		HelpableScreen.__init__(self)
+		menu_path += _("Input devices") + " / "
+		screentitle = _("Select input device")
+		menu_path += screentitle
+		self.menu_path = menu_path + " / "
+		if config.usage.show_menupath.value == 'large':
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
 
-		self.setTitle(_("Select input device"))
 		self.edittext = _("Press OK to edit the settings.")
 
 		self["key_red"] = StaticText(_("Close"))
 		self["key_green"] = StaticText(_("Select"))
-		self["key_yellow"] = StaticText("")
-		self["key_blue"] = StaticText("")
 		self["introduction"] = StaticText(self.edittext)
 
 		self.devices = [(iInputDevices.getDeviceName(x),x) for x in iInputDevices.getDeviceList()]
-		print "[InputDeviceSelection] found devices :->", len(self.devices),self.devices
+		print "[InputDeviceSetup] found devices :->", len(self.devices),self.devices
 
 		self["OkCancelActions"] = HelpableActionMap(self, "OkCancelActions",
 			{
@@ -44,11 +55,7 @@ class InputDeviceSelection(Screen, HelpableScreen):
 		self.list = []
 		self["list"] = List(self.list)
 		self.updateList()
-		self.onLayoutFinish.append(self.layoutFinished)
 		self.onClose.append(self.cleanup)
-
-	def layoutFinished(self):
-		self.setTitle(_("Select input device"))
 
 	def cleanup(self):
 		self.currentIndex = 0
@@ -104,19 +111,32 @@ class InputDeviceSelection(Screen, HelpableScreen):
 			if selection[0] == 'rctype':
 				self.session.open(RemoteControlType)
 			else:
-				self.session.openWithCallback(self.DeviceSetupClosed, InputDeviceSetup, selection[0])
+				self.session.openWithCallback(self.DeviceSetupClosed, InputDeviceSetup, self.menu_path, selection[0])
 
 	def DeviceSetupClosed(self, *ret):
 		self.updateList()
 
 
 class InputDeviceSetup(Screen, ConfigListScreen):
-	def __init__(self, session, device):
+	def __init__(self, session, menu_path="", device=None):
 		Screen.__init__(self, session)
+		screentitle = _("Input device setup")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
+		self.setup_title = title
+
 		self.inputDevice = device
 		iInputDevices.currentDevice = self.inputDevice
 		self.onChangedEntry = [ ]
-		self.setup_title = _("Input device setup")
 		self.isStepSlider = None
 		self.enableEntry = None
 		self.repeatEntry = None
@@ -136,8 +156,6 @@ class InputDeviceSetup(Screen, ConfigListScreen):
 
 		self["key_red"] = StaticText(_("Cancel"))
 		self["key_green"] = StaticText(_("OK"))
-		self["key_yellow"] = StaticText()
-		self["key_blue"] = StaticText()
 		self["introduction"] = StaticText()
 
 		# for generating strings into .po only
@@ -148,7 +166,6 @@ class InputDeviceSetup(Screen, ConfigListScreen):
 		self.onClose.append(self.cleanup)
 
 	def layoutFinished(self):
-		self.setTitle(self.setup_title)
 		listWidth = self["config"].l.getItemSize().width()
 		# use 20% of list width for sliders
 		self["config"].l.setSeperation(int(listWidth*.8))
@@ -215,7 +232,7 @@ class InputDeviceSetup(Screen, ConfigListScreen):
 
 	def confirm(self, confirmed):
 		if not confirmed:
-			print "not confirmed"
+			print "[InputDeviceSetup] not confirmed"
 			return
 		else:
 			self.nameEntry[1].setValue(iInputDevices.getDeviceAttribute(self.inputDevice, 'name'))
@@ -272,9 +289,9 @@ class RemoteControlType(Screen, ConfigListScreen):
 			("11", _("et9200/9500/6500")),
 			("13", _("et4000")),
 			("14", _("XP1000")),
-			("18", _("F1/F3")),
 			("16", _("HD1100/et7x00/et8500")),
-			("19", _("HD2400"))
+			("18", _("F1/F3")),
+			("19", _("HD2400")),
 			]
 
 	defaultRcList = [
@@ -295,10 +312,11 @@ class RemoteControlType(Screen, ConfigListScreen):
 			("hd2400", 19),
 			("et7000", 16),
 			("et7500", 16),
-			("et8500", 16)
+			("et8500", 16),
+			("hd51", 16),
 		]
 
-	def __init__(self, session):
+	def __init__(self, session, menu_path=""):
 		Screen.__init__(self, session)
 		self.skinName = ["RemoteControlType", "Setup" ]
 
@@ -328,6 +346,10 @@ class RemoteControlType(Screen, ConfigListScreen):
 			if x[0] in data:
 				self.defaultRcType = x[1]
 				break
+# If there is none in the list, use the current value...
+#
+		if self.defaultRcType == 0:
+			self.defaultRcType = iRcTypeControl.readRcType()
 
 	def setDefaultRcType(self):
 		iRcTypeControl.writeRcType(self.defaultRcType)

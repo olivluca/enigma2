@@ -83,6 +83,12 @@ void eComponentScan::addInitial(const eDVBFrontendParametersTerrestrial &p)
 	m_initial.push_back(parm);
 }
 
+void eComponentScan::addInitial(const eDVBFrontendParametersATSC &p)
+{
+	ePtr<eDVBFrontendParameters> parm = new eDVBFrontendParameters();
+	parm->setATSC(p);
+	m_initial.push_back(parm);
+}
 
 int eComponentScan::start(int feid, int flags, int networkid)
 {
@@ -93,30 +99,30 @@ int eComponentScan::start(int feid, int flags, int networkid)
 		return -1;
 
 	m_done = 0;
-	ePtr<eDVBResourceManager> mgr;
+	ePtr<eDVBResourceManager> res;
+	int err;
 
-	eDVBResourceManager::getInstance(mgr);
+	if ((err = eDVBResourceManager::getInstance(res)) != 0)
+	{
+		eDebug("[eComponentScan] no resource manager");
+		return -1;
+	}
 
 	eUsePtr<iDVBChannel> channel;
 
-	if (mgr->allocateRawChannel(channel, feid))
+	if (res->allocateRawChannel(channel, feid))
 	{
 		eDebug("[eComponentScan] allocating raw channel (on frontend %d) failed!", feid);
 		return -1;
 	}
 
-	std::list<ePtr<iDVBFrontendParameters> > list;
 	m_scan = new eDVBScan(channel);
-	m_scan->connectEvent(slot(*this, &eComponentScan::scanEvent), m_scan_event_connection);
+	m_scan->connectEvent(sigc::mem_fun(*this, &eComponentScan::scanEvent), m_scan_event_connection);
 
 	if (!(flags & scanRemoveServices))
 	{
 		ePtr<iDVBChannelList> db;
-		ePtr<eDVBResourceManager> res;
-		int err;
-		if ((err = eDVBResourceManager::getInstance(res)) != 0)
-			eDebug("[eComponentScan] no resource manager");
-		else if ((err = res->getChannelList(db)) != 0)
+		if ((err = res->getChannelList(db)) != 0)
 			eDebug("[eComponentScan] no channel list");
 		else
 		{
@@ -140,6 +146,12 @@ int eComponentScan::start(int feid, int flags, int networkid)
 							break;
 						case iDVBFrontend::feTerrestrial:
 							db->removeFlags(eDVBService::dxNewFound, 0xEEEE0000, -1, -1, -1);
+							break;
+						case iDVBFrontend::feATSC:
+							eDVBFrontendParametersATSC parm;
+							tp->getATSC(parm);
+							int ns = parm.system == eDVBFrontendParametersATSC::System_ATSC ? 0xEEEE0000 : 0xFFFF0000;
+							db->removeFlags(eDVBService::dxNewFound, ns, -1, -1, -1);
 							break;
 					}
 				}

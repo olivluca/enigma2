@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--suppress XmlUnboundNsPrefix, XmlUnboundNsPrefix -->
+<!-- This skin is at github.com/OpenViX/enigma2/tree/master/data/vfd255 -->
 <skin>
 	<windowstyle id="1" type="skinned">
 		<color color="#000000" name="Background"/>
@@ -23,7 +24,7 @@
 <!-- template -->
 	<screen name="SummaryClockPanel">
 		<widget source="global.CurrentTime" render="Label" position="195,48" size="60,22" font="FdLcD;20" halign="right" valign="bottom" noWrap="1">
-			<convert type="ClockToText"/>
+			<convert type="ClockToText">Format:%H:%M</convert>
 		</widget>
 	</screen>
 

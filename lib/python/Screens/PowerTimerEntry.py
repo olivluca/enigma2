@@ -7,23 +7,43 @@ from Components.Button import Button
 from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Components.SystemInfo import SystemInfo
+#from Components.Sources.Boolean import Boolean
+from Components.Sources.StaticText import StaticText
+from Components.config import config
 from PowerTimer import AFTEREVENT, TIMERTYPE
 from time import localtime, mktime, time, strftime
 from datetime import datetime
 
 class TimerEntry(Screen, ConfigListScreen):
-	def __init__(self, session, timer):
+	def __init__(self, session, timer, menu_path=""):
 		Screen.__init__(self, session)
+		screentitle = _("PowerManager entry")
+		menu_path += screentitle
+		if config.usage.show_menupath.value == 'large':
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			print 'menu_path:',menu_path
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		self.setup_title = title
+		Screen.setTitle(self, title)
+
 		self.timer = timer
 
 		self.entryDate = None
 		self.entryService = None
 
-		self["HelpWindow"] = Pixmap()
-		self["HelpWindow"].hide()
+		# No ConfigText fields in TimerEntry so these are not currently used.
+		#self["HelpWindow"] = Pixmap()
+		#self["HelpWindow"].hide()
+		#self["VKeyIcon"] = Boolean(False)
 
-		self["oktext"] = Label(_("OK"))
-		self["canceltext"] = Label(_("Cancel"))
+		self["key_green"] = self["oktext"] = Label(_("OK"))
+		self["key_red"] = self["canceltext"] = Label(_("Cancel"))
 		self["ok"] = Pixmap()
 		self["cancel"] = Pixmap()
 
@@ -42,7 +62,6 @@ class TimerEntry(Screen, ConfigListScreen):
 
 		self.list = []
 		ConfigListScreen.__init__(self, self.list, session = session)
-		self.setTitle(_("PowerManager entry"))
 		self.createSetup("config")
 
 	def createConfig(self):
@@ -83,7 +102,7 @@ class TimerEntry(Screen, ConfigListScreen):
 				count = 0
 				for x in (0, 1, 2, 3, 4, 5, 6):
 					if flags == 1: # weekly
-						print "Set to weekday " + str(x)
+						print "[PowerTimerEntry] Set to weekday " + str(x)
 						weekday = x
 					if flags & 1 == 1: # set user defined flags
 						day[x] = 1
@@ -112,16 +131,16 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.timerentry_type = ConfigSelection(choices = [("once",_("once")), ("repeated", _("repeated"))], default = type)
 
 		self.timerentry_repeated = ConfigSelection(default = repeated, choices = [("daily", _("daily")), ("weekly", _("weekly")), ("weekdays", _("Mon-Fri")), ("user", _("user defined"))])
-		self.timerrntry_autosleepdelay = ConfigInteger(default=autosleepdelay, limits = (10, 300))
+		self.timerentry_autosleepdelay = ConfigInteger(default=autosleepdelay, limits = (10, 300))
 		self.timerentry_autosleeprepeat = ConfigSelection(choices = [("once",_("once")), ("repeated", _("repeated"))], default = autosleeprepeat)
-		self.timerrntry_autosleepinstandbyonly = ConfigSelection(choices = [("yes",_("Yes")), ("no", _("No"))],default=autosleepinstandbyonly)
+		self.timerentry_autosleepinstandbyonly = ConfigSelection(choices = [("yes",_("Yes")), ("no", _("No"))],default=autosleepinstandbyonly)
 
-		self.timerentry_date = ConfigDateTime(default = self.timer.begin, formatstring = _("%d.%B %Y"), increment = 86400)
+		self.timerentry_date = ConfigDateTime(default = self.timer.begin, formatstring = config.usage.date.full.value, increment = 86400)
 		self.timerentry_starttime = ConfigClock(default = self.timer.begin)
 		self.timerentry_endtime = ConfigClock(default = self.timer.end)
 		self.timerentry_showendtime = ConfigSelection(default = (((self.timer.end - self.timer.begin) /60 ) > 1), choices = [(True, _("yes")), (False, _("no"))])
 
-		self.timerentry_repeatedbegindate = ConfigDateTime(default = self.timer.repeatedbegindate, formatstring = _("%d.%B %Y"), increment = 86400)
+		self.timerentry_repeatedbegindate = ConfigDateTime(default = self.timer.repeatedbegindate, formatstring = config.usage.date.full.value, increment = 86400)
 
 		self.timerentry_weekday = ConfigSelection(default = weekday_table[weekday], choices = [("mon",_("Monday")), ("tue", _("Tuesday")), ("wed",_("Wednesday")), ("thu", _("Thursday")), ("fri", _("Friday")), ("sat", _("Saturday")), ("sun", _("Sunday"))])
 
@@ -137,8 +156,8 @@ class TimerEntry(Screen, ConfigListScreen):
 
 		if self.timerentry_timertype.value == "autostandby" or self.timerentry_timertype.value == "autodeepstandby":
 			if self.timerentry_timertype.value == "autodeepstandby":
-				self.list.append(getConfigListEntry(_("Only active when in standby"), self.timerrntry_autosleepinstandbyonly))
-			self.list.append(getConfigListEntry(_("Sleep delay"), self.timerrntry_autosleepdelay))
+				self.list.append(getConfigListEntry(_("Only active when in standby"), self.timerentry_autosleepinstandbyonly))
+			self.list.append(getConfigListEntry(_("Sleep delay"), self.timerentry_autosleepdelay))
 			self.list.append(getConfigListEntry(_("Repeat type"), self.timerentry_autosleeprepeat))
 			self.timerTypeEntry = getConfigListEntry(_("Repeat type"), self.timerentry_type)
 			self.entryShowEndTime = getConfigListEntry(_("Set end time"), self.timerentry_showendtime)
@@ -251,9 +270,14 @@ class TimerEntry(Screen, ConfigListScreen):
 		if self.timerentry_timertype.value == "autostandby" or self.timerentry_timertype.value == "autodeepstandby":
 			self.timer.begin = int(time()) + 10
 			self.timer.end = self.timer.begin
-			self.timer.autosleepinstandbyonly = self.timerrntry_autosleepinstandbyonly.value
-			self.timer.autosleepdelay = self.timerrntry_autosleepdelay.value
+			self.timer.autosleepinstandbyonly = self.timerentry_autosleepinstandbyonly.value
+			self.timer.autosleepdelay = self.timerentry_autosleepdelay.value
 			self.timer.autosleeprepeat = self.timerentry_autosleeprepeat.value
+# Ensure that the timer repeated is cleared if we have an autosleeprepeat
+			if self.timerentry_type.value == "repeated":
+				self.timer.resetRepeated()
+				self.timerentry_type.value = "once" # Stop it being set again
+
 		if self.timerentry_type.value == "repeated":
 			if self.timerentry_repeated.value == "daily":
 				for x in (0, 1, 2, 3, 4, 5, 6):
@@ -286,7 +310,12 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.saveTimer()
 		self.close((True, self.timer))
 
+# The following four functions check for the item to be changed existing
+# as for auto[deep]standby timers it doesn't, so we'll crash otherwise.
+#
 	def incrementStart(self):
+		if not hasattr(self, "entryStartTime"):
+			return
 		self.timerentry_starttime.increment()
 		self["config"].invalidate(self.entryStartTime)
 		if self.timerentry_type.value == "once" and self.timerentry_starttime.value == [0, 0]:
@@ -294,6 +323,8 @@ class TimerEntry(Screen, ConfigListScreen):
 			self["config"].invalidate(self.entryDate)
 
 	def decrementStart(self):
+		if not hasattr(self, "entryStartTime"):
+			return
 		self.timerentry_starttime.decrement()
 		self["config"].invalidate(self.entryStartTime)
 		if self.timerentry_type.value == "once" and self.timerentry_starttime.value == [23, 59]:
@@ -301,11 +332,15 @@ class TimerEntry(Screen, ConfigListScreen):
 			self["config"].invalidate(self.entryDate)
 
 	def incrementEnd(self):
+		if not hasattr(self, "entryEndTime"):
+			return
 		if self.entryEndTime is not None:
 			self.timerentry_endtime.increment()
 			self["config"].invalidate(self.entryEndTime)
 
 	def decrementEnd(self):
+		if not hasattr(self, "entryEndTime"):
+			return
 		if self.entryEndTime is not None:
 			self.timerentry_endtime.decrement()
 			self["config"].invalidate(self.entryEndTime)
@@ -317,8 +352,21 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.close((False,))
 
 class TimerLog(Screen):
-	def __init__(self, session, timer):
+	def __init__(self, session, timer, menu_path=""):
 		Screen.__init__(self, session)
+		screentitle = _("Log")
+		if config.usage.show_menupath.value == 'large':
+			menu_path += screentitle
+			title = menu_path
+			self["menu_path_compressed"] = StaticText("")
+		elif config.usage.show_menupath.value == 'small':
+			title = screentitle
+			self["menu_path_compressed"] = StaticText(menu_path + " >" if not menu_path.endswith(' / ') else menu_path[:-3] + " >" or "")
+		else:
+			title = screentitle
+			self["menu_path_compressed"] = StaticText("")
+		Screen.setTitle(self, title)
+
 		self.skinName = "TimerLog"
 		self.timer = timer
 		self.log_entries = self.timer.log_entries[:]
@@ -346,7 +394,6 @@ class TimerLog(Screen):
 			"red": self.deleteEntry,
 			"blue": self.clearLog
 		}, -1)
-		self.setTitle(_("PowerManager log"))
 
 	def deleteEntry(self):
 		cur = self["loglist"].getCurrent()

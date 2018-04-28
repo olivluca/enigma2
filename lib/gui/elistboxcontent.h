@@ -31,7 +31,7 @@ protected:
 	void cursorRestore();
 	int size();
 
-	RESULT connectItemChanged(const Slot0<void> &itemChanged, ePtr<eConnection> &connection);
+	RESULT connectItemChanged(const sigc::slot0<void> &itemChanged, ePtr<eConnection> &connection);
 
 	// void setOutputDevice ? (for allocating colors, ...) .. requires some work, though
 	void setSize(const eSize &size);
@@ -56,8 +56,9 @@ public:
 	void paint(gPainter &painter, eWindowStyle &style, const ePoint &offset, int selected);
 	void setSeperation(int sep) { m_seperation = sep; }
 	int currentCursorSelectable();
+	void setSlider(int height, int space) { m_slider_height = height; m_slider_space = space; }
 private:
-	int m_seperation;
+	int m_seperation, m_slider_height, m_slider_space;
 };
 
 class eListboxPythonMultiContent: public eListboxPythonStringContent
@@ -100,6 +101,7 @@ private:
 #define BT_ALPHABLEND 2
 #define BT_SCALE 4
 #define BT_KEEP_ASPECT_RATIO 8
+#define BT_FIXRATIO 8
 #endif // SWIG
 
 #endif
